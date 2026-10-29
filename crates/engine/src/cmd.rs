@@ -13,6 +13,7 @@ mod draw2;
 mod draworder;
 mod edit;
 mod exchange;
+mod pdfimport;
 pub mod file;
 mod gripcmds;
 mod griphot;
@@ -202,6 +203,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(layout::specs());
         v.extend(exchange::specs());
         v.extend(image::specs());
+        v.extend(pdfimport::specs());
         v.extend(props::specs());
         v.extend(inquiry::specs());
         v.extend(settings::specs());

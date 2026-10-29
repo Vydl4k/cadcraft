@@ -15,6 +15,8 @@ mod dxf_table;
 mod dxf_write;
 mod dxf_xref;
 pub mod pdf;
+/// PDF pages as editable objects (PDFIMPORT).
+pub mod pdf_read;
 pub mod plotter;
 /// Raster image files (PNG, JPEG, BMP, TIFF) decoded to pixels.
 pub mod raster;
@@ -35,6 +37,7 @@ pub use cadcraft_dxf::Version;
 pub use dxf_read::entity_from_groups;
 pub use dxf_write::entity_groups;
 pub use pdf::{PdfOptions, pdf, plot};
+pub use pdf_read::PdfImport;
 
 /// How a drawing is saved as DXF or DWG.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -89,6 +92,8 @@ pub(crate) fn read_source(bytes: &[u8], name: &Path) -> Result<(Drawing, Option<
     }
     let d = match (Format::from_path(name), ext(name).as_str()) {
         (Some(Format::Svg | Format::Svgz), _) => svg_read::read(bytes),
+        // Page 1, in millimetres on the sheet (PDFIMPORT chooses the page and the scale).
+        (Some(Format::Pdf), _) => pdf_read::import(bytes, &pdf_read::PdfImport::default()),
         (Some(Format::Dxf), _) => dxf_read::read(bytes),
         (_, e) if bytes.len() > 4 => dxf_read::read(bytes).map_err(|_| IoError::Unsupported(e.to_string())),
         (_, e) => Err(IoError::Unsupported(e.to_string())),
