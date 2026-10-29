@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-15
+    # Apple-silicon runners were not available for this fork; an Intel runner cross-compiles
+    # the aarch64 build (package.sh builds with --target aarch64-apple-darwin).
+    runs-on: macos-15-intel
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
