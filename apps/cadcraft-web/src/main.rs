@@ -119,7 +119,13 @@ mod web {
         cadcraft_engine::cmd::file::set_pdf(cadcraft_engine::cmd::file::PdfHooks {
             pages: |b| cadcraft_io::pdf_read::page_count(b).map_err(|e| e.to_string()),
             import: |b, r| {
-                let opts = cadcraft_io::PdfImport { page: r.page, units_per_point: r.units_per_point, fills: r.fills, white_fills: r.white_fills, text: r.text };
+                let opts = cadcraft_io::PdfImport {
+                    page: r.page,
+                    units_per_point: r.units_per_point,
+                    fills: r.fills,
+                    white_fills: r.white_fills,
+                    text: r.text,
+                };
                 cadcraft_io::pdf_read::import(b, &opts).map_err(|e| e.to_string())
             },
         });
