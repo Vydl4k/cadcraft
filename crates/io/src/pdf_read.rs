@@ -94,7 +94,11 @@ pub fn import(bytes: &[u8], opts: &PdfImport) -> Result<Drawing> {
     let pages = pdf.pages();
     let n = pages.len();
     let page = opts.page.checked_sub(1).and_then(|i| pages.get(i)).ok_or_else(|| {
-        err(if n == 1 { format!("page {} doesn't exist: the file has 1 page", opts.page) } else { format!("page {} doesn't exist: the file has {n} pages", opts.page) })
+        err(if n == 1 {
+            format!("page {} doesn't exist: the file has 1 page", opts.page)
+        } else {
+            format!("page {} doesn't exist: the file has {n} pages", opts.page)
+        })
     })?;
     let (w, h) = page.render_dimensions();
     let initial = page.initial_transform(false).to_kurbo();
@@ -190,10 +194,12 @@ fn cubic_at(p0: Point, p1: Point, p2: Point, p3: Point, t: f64) -> Point {
 }
 
 fn poly_len(pts: &[Point]) -> f64 {
-    pts.windows(2).map(|w| match w {
-        [a, b] => a.distance(*b),
-        _ => 0.0,
-    }).sum()
+    pts.windows(2)
+        .map(|w| match w {
+            [a, b] => a.distance(*b),
+            _ => 0.0,
+        })
+        .sum()
 }
 
 impl Collector {
@@ -535,7 +541,6 @@ pub fn describe(bytes: &[u8]) -> Result<(usize, f64, f64)> {
     Ok((pages.len(), f64::from(w), f64::from(h)))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,7 +576,7 @@ mod tests {
     }
 
     fn model(d: &Drawing) -> Vec<&Entity> {
-        d.model.iter().collect()
+        d.model.iter().map(|e| &**e).collect()
     }
 
     #[test]

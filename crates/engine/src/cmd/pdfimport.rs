@@ -106,12 +106,19 @@ fn run_pdfimport(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let page = match p.get("page") {
         None => 1,
-        Some(v) => v.as_u64().and_then(|n| usize::try_from(n).ok()).filter(|n| *n >= 1).ok_or_else(|| bad("pdfimport", "`page` must be a page number from 1"))?,
+        Some(v) => v
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| *n >= 1)
+            .ok_or_else(|| bad("pdfimport", "`page` must be a page number from 1"))?,
     };
     let scale = match p.get("scale") {
         None => 1.0,
         Some(Value::String(t)) => parse_scale(t).ok_or_else(|| bad("pdfimport", "`scale` must be a number like 50 or \"1:50\""))?,
-        Some(v) => v.as_f64().filter(|n| n.is_finite() && (1e-6..=1e6).contains(n)).ok_or_else(|| bad("pdfimport", "`scale` must be a positive number (50 for 1:50)"))?,
+        Some(v) => v
+            .as_f64()
+            .filter(|n| n.is_finite() && (1e-6..=1e6).contains(n))
+            .ok_or_else(|| bad("pdfimport", "`scale` must be a positive number (50 for 1:50)"))?,
     };
     let at = match p.get("at") {
         Some(v) => point_value(v).ok_or_else(|| bad("pdfimport", "`at` must be a point [x, y]"))?,
