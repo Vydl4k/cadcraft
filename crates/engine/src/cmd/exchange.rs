@@ -155,7 +155,7 @@ fn run_import(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// Copy `src`'s model space into the current space (scaled about the origin, then moved to
 /// `at`), with the layers, linetypes, styles and blocks it needs.
-fn import_drawing(s: &mut Session, src: &Drawing, at: Vec2, scale: f64, file: &str) -> Result<Value> {
+pub(super) fn import_drawing(s: &mut Session, src: &Drawing, at: Vec2, scale: f64, file: &str) -> Result<Value> {
     let m = Mat3::scale(scale, scale).then(Mat3::translate(at));
     let moved = at != Vec2::ZERO || scale != 1.0;
     let space = s.space();

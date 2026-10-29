@@ -1,0 +1,50 @@
+# Builds CADCraft with PDFIMPORT for Apple silicon Macs (ad-hoc signed, not notarized) and keeps
+# the DMG as a workflow artifact. Runs on every push to the `pdfimport` branch, or by hand from
+# the Actions tab.
+name: macOS build (PDFIMPORT)
+
+on:
+  push:
+    branches: [pdfimport]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-pdfimport-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --target aarch64-apple-darwin
+          rustup default stable
+          rustc --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-aarch64-${{ hashFiles('Cargo.lock') }}
+          restore-keys: macos-aarch64-
+
+      - name: Build and package (ad-hoc signed)
+        env:
+          CADCRAFT_VERSION: 0.14.0-pdfimport
+        run: packaging/macos/package.sh --arch aarch64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CADCraft-pdfimport-macos-aarch64
+          path: dist/release/*.dmg
+          if-no-files-found: error
+          retention-days: 30

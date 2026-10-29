@@ -47,6 +47,25 @@ pub fn route(app: &mut CadApp, id: &str) -> Result<Value, String> {
     }
 }
 
+/// PDFIMPORT typed or from the menu: the file comes from the host's file picker (where there is
+/// one), then the command asks for the page, the scale and the insertion point. JSON calls (with
+/// parameters) run the engine command as it is.
+pub fn route_pdfimport(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    if !params.is_null() || !matches!(cadcraft_engine::cmd::resolve_alias(id).as_str(), "pdfimport") {
+        return None;
+    }
+    let picked = app.services.pick_open.as_ref().and_then(|f| f())?;
+    if let Err(e) = app.session.start("pdfimport") {
+        return Some(Err(e.to_string()));
+    }
+    // The picked name goes in as literal text, never through the command line, so a file name
+    // can't run a command (CWE-74).
+    if let Err(e) = app.session.input(cadcraft_engine::Input::Text(picked)) {
+        return Some(Err(e.to_string()));
+    }
+    Some(Ok(Value::Null))
+}
+
 fn no_picker(app: &mut CadApp, name: &str, example: &str) -> Result<Value, String> {
     let msg = format!("{name}: there is no file dialog here; run it with parameters, e.g. {example}");
     app.session.echo(msg.clone());

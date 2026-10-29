@@ -42,6 +42,38 @@ pub struct IoHooks {
 
 static IO: OnceLock<IoHooks> = OnceLock::new();
 
+/// How PDFIMPORT reads one PDF page (see `cadcraft_io::PdfImport`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PdfImportRequest {
+    /// The page, from 1.
+    pub page: usize,
+    /// Drawing units per PDF point (1/72 in on the sheet).
+    pub units_per_point: f64,
+    /// Filled areas as closed outlines.
+    pub fills: bool,
+    /// White fills too.
+    pub white_fills: bool,
+    /// Text as TEXT where the PDF names its characters.
+    pub text: bool,
+}
+
+/// PDFIMPORT's PDF reader, installed by the app with the io layer's (a lower layer).
+pub struct PdfHooks {
+    /// The number of pages.
+    pub pages: fn(&[u8]) -> std::result::Result<usize, String>,
+    /// One page as a drawing in model space.
+    pub import: fn(&[u8], &PdfImportRequest) -> std::result::Result<Drawing, String>,
+}
+
+static PDF: OnceLock<PdfHooks> = OnceLock::new();
+
+pub fn set_pdf(h: PdfHooks) {
+    let _ = PDF.set(h);
+}
+pub fn pdf() -> Option<&'static PdfHooks> {
+    PDF.get()
+}
+
 pub fn set_io(h: IoHooks) {
     let _ = IO.set(h);
 }

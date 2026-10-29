@@ -20,7 +20,9 @@ thiserror = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 miniz_oxide = "0.9"
-craft-pdf = { workspace = true, features = ["write"] }
+# PDF writing for plots; PDFIMPORT reads pages through craft-pdf's guarded interpreter.
+craft-pdf = { workspace = true, features = ["write", "interpret"] }
+kurbo = "0.13"
 quick-xml = { workspace = true }
 
 [dev-dependencies]
