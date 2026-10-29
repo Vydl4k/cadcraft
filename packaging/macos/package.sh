@@ -181,6 +181,11 @@ ditto -c -k --keepParent "$CLI_DIR" "$CLI_ZIP"
 # A bare Mach-O can't carry a stapled ticket; Gatekeeper looks the notarization up online.
 if [[ "$NOTARIZE" = 1 ]]; then notarize "$CLI_ZIP"; fi
 
-"$WORK/bin/cadcraft-cli" --version
+# The binary runs only on a host it was built for (an Intel runner can cross-build arm64).
+if [[ "$ARCH" = universal ]] || [[ "$ARCH" = "$(uname -m | sed 's/arm64/aarch64/')" ]]; then
+  "$WORK/bin/cadcraft-cli" --version
+else
+  echo "skipping the --version check: $ARCH binary on a $(uname -m) host"
+fi
 echo "==> done"
 ls -lh "$DMG" "$CLI_ZIP"

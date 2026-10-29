@@ -42,7 +42,13 @@ jobs:
       - name: Build and package (ad-hoc signed)
         env:
           CADCRAFT_VERSION: 0.14.0-pdfimport
-        run: packaging/macos/package.sh --arch aarch64
+        # The log's tail becomes annotations, which show without signing in to GitHub.
+        run: |
+          set -o pipefail
+          if ! packaging/macos/package.sh --arch aarch64 2>&1 | tee build.log; then
+            tail -n 60 build.log | sed 's/^/::error::/'
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
