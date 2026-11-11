@@ -749,6 +749,19 @@ mod tests {
     }
 
     #[test]
+    fn czech_and_slovak_letters_have_glyphs() {
+        for c in "ČčĎďĚěĹĺĽľŇňŔŕŘřŠšŤťŮůŽžÁáÉéÍíÓóÚúÝýÄäÔô".chars() {
+            let (w, spec) = stroke::glyph(c).unwrap_or_else(|| panic!("{c:?} has no glyph"));
+            for st in stroke::strokes(spec) {
+                for (x, y) in st {
+                    assert!(x >= 0.0 && x <= w, "{c:?} x={x} w={w}");
+                    assert!((-2.0..=9.0).contains(&y), "{c:?} y={y}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn control_codes() {
         let d: String = decode_controls("45%%d %%p0.1 %%c10 100%%%").iter().map(|x| x.0).collect();
         assert_eq!(d, "45° ±0.1 ⌀10 100%");
