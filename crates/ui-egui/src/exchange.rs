@@ -51,11 +51,12 @@ pub fn route(app: &mut CadApp, id: &str) -> Result<Value, String> {
 /// one), then the command asks for the page, the scale and the insertion point. JSON calls (with
 /// parameters) run the engine command as it is.
 pub fn route_pdfimport(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
-    if !params.is_null() || !matches!(cadcraft_engine::cmd::resolve_alias(id).as_str(), "pdfimport") {
+    if !params.is_null() || !matches!(cadcraft_engine::cmd::resolve_alias(id).as_str(), "pdfimport" | "geobody") {
         return None;
     }
     let picked = app.services.pick_open.as_ref().and_then(|f| f())?;
-    if let Err(e) = app.session.start("pdfimport") {
+    let cmd = cadcraft_engine::cmd::resolve_alias(id);
+    if let Err(e) = app.session.start(&cmd) {
         return Some(Err(e.to_string()));
     }
     // The picked name goes in as literal text, never through the command line, so a file name

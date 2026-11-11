@@ -173,6 +173,7 @@ fn services() -> Services {
                 .add_filter(i18n::t("Drawings (DWG, DXF)"), &["dwg", "dxf", "dwt"])
                 .add_filter(i18n::t("SVG drawings (SVG, SVGZ)"), &["svg", "svgz"])
                 .add_filter("PDF", &["pdf"])
+                .add_filter("Coordinate lists (TXT, CSV)", &["txt", "csv", "xyz", "ss"])
                 .add_filter(i18n::t("All files"), &["*"])
                 .pick_file()
                 .map(|p| p.to_string_lossy().to_string())
