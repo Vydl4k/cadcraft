@@ -158,6 +158,20 @@ pub enum Icon {
     ZoomFit,
     TextStyle,
     DimStyle,
+    // Survey add-on (Geo tool set).
+    GeoImportPoints,
+    GeoExportPoints,
+    GeoDuplicates,
+    GeoShiftHeights,
+    GeoSpotHeight,
+    GeoTerrain,
+    GeoContours,
+    GeoVolumes,
+    GeoProfile,
+    GeoWall,
+    GeoOpening,
+    GeoTapeOutline,
+    PdfImport,
 }
 
 struct Pen<'a> {
@@ -257,6 +271,132 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
     paint_display_toggles(&pen, icon, b, a, dim);
     paint_navigation_controls(&pen, icon, b, a, dim);
     paint_constraints(&pen, icon, b, a, dim);
+    paint_geo(&pen, icon, b, a, dim);
+}
+
+/// The survey add-on's tools: points with numbers and heights, terrain, buildings.
+fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
+    let alpha = |c: Color32| if dim { c.gamma_multiply(0.4) } else { c };
+    let red = alpha(Color32::from_rgb(0xd9, 0x4f, 0x45));
+    use Icon::*;
+    match icon {
+        GeoImportPoints | GeoExportPoints => {
+            // A coordinate list (a sheet with lines) and the points it holds.
+            pen.poly(&[(3.0, 3.0), (10.0, 3.0), (12.0, 5.0), (12.0, 13.0), (3.0, 13.0)], true, b);
+            for y in [6.0, 8.5, 11.0] {
+                pen.l(5.0, y, 10.0, y);
+            }
+            for (x, y) in [(15.0, 19.0), (19.0, 15.0), (21.0, 21.0)] {
+                pen.dot(x, y);
+            }
+            if icon == GeoImportPoints {
+                pen.la(8.0, 15.0, 8.0, 19.0);
+                pen.la(8.0, 19.0, 12.0, 19.0);
+                pen.arrow_tip(13.5, 19.0, 1.0, 0.0, a);
+            } else {
+                pen.la(19.0, 12.0, 19.0, 6.0);
+                pen.la(19.0, 6.0, 15.5, 6.0);
+                pen.arrow_tip(14.0, 6.0, -1.0, 0.0, a);
+            }
+        }
+        GeoDuplicates => {
+            pen.dot(10.5, 12.0);
+            pen.dot(13.5, 12.0);
+            pen.c(12.0, 12.0, 7.0, red);
+            pen.dot(4.0, 20.0);
+            pen.dot(20.0, 4.0);
+        }
+        GeoShiftHeights => {
+            for (x, y) in [(5.0, 16.0), (12.0, 19.0), (19.0, 15.0)] {
+                pen.dot(x, y);
+                pen.la(x, y - 3.0, x, y - 10.0);
+                pen.arrow_tip(x, y - 11.5, 0.0, -1.0, a);
+            }
+        }
+        GeoSpotHeight => {
+            // A point on a slope with its height written beside it.
+            pen.poly(&[(2.0, 20.0), (9.0, 15.0), (22.0, 11.0)], false, b);
+            pen.dot(9.0, 15.0);
+            pen.la(11.0, 11.0, 21.0, 11.0);
+            pen.la(11.0, 7.5, 21.0, 7.5);
+            pen.la(11.0, 7.5, 11.0, 11.0);
+        }
+        GeoTerrain => {
+            // Points joined into triangles.
+            let v = [(3.0, 19.0), (10.0, 21.0), (20.0, 18.0), (6.0, 10.0), (14.0, 12.0), (21.0, 6.0), (11.0, 3.0)];
+            for (i, j) in [(0, 1), (1, 2), (0, 3), (3, 4), (0, 4), (1, 4), (2, 4), (4, 5), (2, 5), (3, 6), (4, 6), (5, 6)] {
+                if let (Some(p), Some(q)) = (v.get(i), v.get(j)) {
+                    pen.la(p.0, p.1, q.0, q.1);
+                }
+            }
+            for (x, y) in v {
+                pen.dot(x, y);
+            }
+        }
+        GeoContours => {
+            pen.poly(&[(3.0, 13.0), (5.0, 7.0), (11.0, 4.0), (18.0, 5.0), (21.0, 10.0), (19.0, 17.0), (12.0, 20.0), (5.0, 18.0)], true, b);
+            pen.poly(&[(7.0, 12.0), (9.0, 8.5), (13.0, 7.5), (17.0, 9.0), (17.0, 14.0), (12.0, 16.5), (8.0, 15.0)], true, a);
+            pen.poly(&[(11.0, 11.5), (13.0, 10.0), (14.5, 11.5), (12.5, 13.0)], true, b);
+        }
+        GeoVolumes => {
+            // Terrain over a level: the cut above it hatched.
+            pen.poly(&[(2.0, 18.0), (7.0, 14.0), (12.0, 6.0), (17.0, 10.0), (22.0, 16.0)], false, b);
+            pen.la(2.0, 14.0, 22.0, 14.0);
+            for x in [9.5, 12.0, 14.5, 17.0] {
+                let top = if x < 12.0 { 6.0 + (12.0 - x) * 1.6 } else { 6.0 + (x - 12.0) * 0.8 };
+                pen.la(x, 14.0, x - 1.5, top + 1.5);
+            }
+            pen.l(4.0, 21.0, 20.0, 21.0);
+        }
+        GeoProfile => {
+            pen.l(3.0, 20.0, 21.0, 20.0);
+            pen.poly(&[(3.0, 15.0), (8.0, 11.0), (12.0, 13.0), (16.0, 6.0), (21.0, 9.0)], false, a);
+            for (x, y) in [(3.0, 15.0), (8.0, 11.0), (12.0, 13.0), (16.0, 6.0), (21.0, 9.0)] {
+                pen.l(x, 20.0, x, y + 1.0);
+            }
+        }
+        GeoWall => {
+            // An L of wall, two faces with hatching between.
+            pen.poly(&[(3.0, 3.0), (3.0, 21.0), (21.0, 21.0)], false, b);
+            pen.poly(&[(8.0, 3.0), (8.0, 16.0), (21.0, 16.0)], false, b);
+            pen.l(3.0, 3.0, 8.0, 3.0);
+            pen.l(21.0, 16.0, 21.0, 21.0);
+            for k in 0..5 {
+                let y = 5.0 + k as f32 * 3.0;
+                pen.la(3.5, y + 2.5, 7.5, y - 1.5);
+            }
+            for k in 0..4 {
+                let x = 9.0 + k as f32 * 3.0;
+                pen.la(x, 20.5, x + 4.0, 16.5);
+            }
+        }
+        GeoOpening => {
+            // A wall broken by a door swinging open.
+            pen.rect(2.0, 15.0, 6.0, 5.0, b);
+            pen.rect(16.0, 15.0, 6.0, 5.0, b);
+            pen.la(8.0, 15.0, 8.0, 7.0);
+            pen.arc(8.0, 15.0, 8.0, 0.0, 90.0, a);
+        }
+        GeoTapeOutline => {
+            // A building outline with right-angle marks and a taped length.
+            pen.poly(&[(4.0, 6.0), (20.0, 6.0), (20.0, 14.0), (12.0, 14.0), (12.0, 20.0), (4.0, 20.0)], true, b);
+            pen.poly(&[(4.0, 9.0), (7.0, 9.0), (7.0, 6.0)], false, a);
+            pen.poly(&[(17.0, 6.0), (17.0, 9.0), (20.0, 9.0)], false, a);
+            pen.la(4.0, 3.0, 20.0, 3.0);
+            pen.la(4.0, 2.0, 4.0, 4.0);
+            pen.la(20.0, 2.0, 20.0, 4.0);
+            pen.dot(4.0, 6.0);
+            pen.dot(20.0, 6.0);
+        }
+        PdfImport => {
+            pen.poly(&[(4.0, 2.0), (13.0, 2.0), (17.0, 6.0), (17.0, 22.0), (4.0, 22.0)], true, b);
+            pen.poly(&[(13.0, 2.0), (13.0, 6.0), (17.0, 6.0)], false, b);
+            pen.text(10.5, 15.0, "PDF", 5.0, red);
+            pen.la(14.0, 11.0, 21.0, 11.0);
+            pen.arrow_tip(22.5, 11.0, 1.0, 0.0, a);
+        }
+        _ => {}
+    }
 }
 
 fn paint_file_view(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {

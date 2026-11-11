@@ -148,8 +148,10 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
         // Tabs.
         let tab_h = 28.0;
         let mut x = r.left();
-        for name in ["Drafting", "Modeling"] {
-            let w = 92.0;
+        const TABS: [&str; 3] = ["Drafting", "Modeling", "Geo"];
+        // The tabs share the strip, leaving room for the collapse control.
+        let w = ((r.width() - 28.0) / TABS.len() as f32).clamp(52.0, 92.0);
+        for name in TABS {
             let tr = Rect::from_min_size(pos2(x, r.top()), vec2(w, tab_h));
             let active = app.ui.toolset_tab == name;
             let resp = ui.interact(tr, ui.scope_id().with(("ts", name)), Sense::click());
@@ -183,7 +185,11 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-                let groups: &[(&str, &[Tool], &[Tool])] = if app.ui.toolset_tab == "Drafting" { DRAFTING } else { MODELING };
+                let groups: &[(&str, &[Tool], &[Tool])] = match app.ui.toolset_tab.as_str() {
+                    "Drafting" => DRAFTING,
+                    "Geo" => GEO,
+                    _ => MODELING,
+                };
                 for (name, large, small) in groups {
                     let collapsed = app.ui.collapsed_groups.iter().any(|g| g == name);
                     // Header.
@@ -289,6 +295,39 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
         }
     });
 }
+
+/// The survey add-on's tool set: points, terrain, buildings and PDF underlays.
+pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
+    (
+        "Survey Points",
+        &[(Icon::GeoImportPoints, "geobody", "Import Points"), (Icon::GeoSpotHeight, "geovyska", "Terrain Height at Point")],
+        &[
+            (Icon::GeoExportPoints, "geoseznam", "Export Points"),
+            (Icon::GeoDuplicates, "geokontrola", "Check Duplicate Points"),
+            (Icon::GeoShiftHeights, "geozmenaz", "Shift Point Heights"),
+        ],
+    ),
+    (
+        "Terrain",
+        &[
+            (Icon::GeoTerrain, "geodmt", "Terrain Model"),
+            (Icon::GeoContours, "geovrstevnice", "Contours"),
+            (Icon::GeoVolumes, "geokubatury", "Cut and Fill Volumes"),
+            (Icon::GeoProfile, "geoprofil", "Long Section"),
+        ],
+        &[],
+    ),
+    (
+        "Building",
+        &[
+            (Icon::GeoWall, "geozed", "Wall from Face"),
+            (Icon::GeoOpening, "geootvor", "Window or Door"),
+            (Icon::GeoTapeOutline, "geoomerne", "Outline from Tape Measurements"),
+        ],
+        &[],
+    ),
+    ("Underlay", &[(Icon::PdfImport, "pdfimport", "PDF Import")], &[]),
+];
 
 pub const MODELING: &[(&str, &[Tool], &[Tool])] = &[
     (

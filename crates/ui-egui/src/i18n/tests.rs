@@ -84,7 +84,7 @@ fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
         sources.insert(*label);
         sources.extend(path.iter().copied());
     }
-    for groups in [crate::palettes::DRAFTING, crate::palettes::MODELING] {
+    for groups in [crate::palettes::DRAFTING, crate::palettes::MODELING, crate::palettes::GEO] {
         for (name, large, small) in groups {
             sources.insert(*name);
             sources.extend(large.iter().chain(*small).map(|(_, _, label)| *label));
