@@ -18,6 +18,7 @@ pub mod file;
 pub mod geo;
 mod geo_calc;
 mod geo_dmt;
+mod geo_hypso;
 mod geo_pohled;
 mod geo_ram;
 mod geo_rek;
@@ -221,6 +222,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_pohled::specs());
         v.extend(geo_ram::specs());
         v.extend(geo_rezy::specs());
+        v.extend(geo_hypso::specs());
         v.extend(geo_rek::specs());
         v.extend(geo_tools::specs());
         v.extend(props::specs());
