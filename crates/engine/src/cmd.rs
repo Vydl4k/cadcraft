@@ -18,6 +18,7 @@ pub mod file;
 pub mod geo;
 mod geo_calc;
 mod geo_dmt;
+mod geo_rek;
 mod gripcmds;
 mod griphot;
 pub(crate) mod groups;
@@ -211,6 +212,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo::specs());
         v.extend(geo_dmt::specs());
         v.extend(geo_calc::specs());
+        v.extend(geo_rek::specs());
         v.extend(props::specs());
         v.extend(inquiry::specs());
         v.extend(settings::specs());
