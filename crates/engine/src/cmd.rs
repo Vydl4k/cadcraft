@@ -20,6 +20,7 @@ mod geo_calc;
 mod geo_dmt;
 mod geo_export;
 mod geo_hypso;
+mod geo_mapa;
 mod geo_pohled;
 mod geo_ram;
 mod geo_rek;
@@ -229,6 +230,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_vypocty::specs());
         v.extend(geo_export::specs());
         v.extend(geo_teren::specs());
+        v.extend(geo_mapa::specs());
         v.extend(geo_rek::specs());
         v.extend(geo_tools::specs());
         v.extend(props::specs());
