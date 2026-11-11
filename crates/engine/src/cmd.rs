@@ -27,6 +27,7 @@ mod geo_rek;
 mod geo_rezy;
 mod geo_teren;
 mod geo_tools;
+mod geo_vfk;
 mod geo_vol;
 mod geo_vypocty;
 mod gripcmds;
@@ -231,6 +232,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_export::specs());
         v.extend(geo_teren::specs());
         v.extend(geo_mapa::specs());
+        v.extend(geo_vfk::specs());
         v.extend(geo_rek::specs());
         v.extend(geo_tools::specs());
         v.extend(props::specs());

@@ -186,6 +186,17 @@ pub enum Icon {
     GeoLandXml,
     GeoKml,
     GeoBoundary,
+    GeoFallLine,
+    GeoFlipEdge,
+    GeoGridPoints,
+    GeoStations,
+    GeoStl,
+    GeoSymbol,
+    GeoCodes,
+    GeoFence,
+    GeoSlope,
+    GeoMapSheets,
+    GeoCadastre,
     PdfImport,
 }
 
@@ -470,6 +481,8 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
             }
             pen.poly(&v, true, a);
         }
+        GeoFallLine | GeoFlipEdge | GeoGridPoints | GeoStations | GeoStl | GeoSymbol | GeoCodes | GeoFence | GeoSlope | GeoMapSheets
+        | GeoCadastre => paint_geo_more(pen, icon, b, a),
         GeoKml => {
             // A globe with a pin.
             pen.c(12.0, 13.0, 8.0, b);
@@ -1487,4 +1500,91 @@ pub fn describe_control(ui: &egui::Ui, response: &egui::Response, label: &str, s
         ui.painter().rect_stroke(response.rect.shrink(2.0), 2.0, Stroke::new(1.0, Tokens::get().accent), egui::StrokeKind::Inside);
     }
     crate::control::record_widget(ui, response, label, if tab { "tab" } else { "button" }, selected);
+}
+
+/// The map, terrain-tool and cadastre icons of the Geo tool set (split from `paint_geo`).
+fn paint_geo_more(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
+    use Icon::*;
+    match icon {
+        GeoFallLine => {
+            // Contours with a line running across them downhill, ending in an arrow.
+            pen.arc(12.0, 4.0, 6.0, 200.0, 340.0, b);
+            pen.arc(12.0, 4.0, 11.0, 200.0, 340.0, b);
+            pen.arc(12.0, 4.0, 16.0, 210.0, 330.0, b);
+            pen.poly(&[(12.0, 9.0), (11.0, 14.0), (12.5, 19.0)], false, a);
+            pen.arrow_tip(12.5, 21.0, 0.2, 1.0, a);
+        }
+        GeoFlipEdge => {
+            // A quadrilateral of two triangles; the old diagonal faint, the new one bold.
+            pen.poly(&[(3.0, 12.0), (12.0, 3.0), (21.0, 12.0), (12.0, 21.0)], true, b);
+            pen.l(3.0, 12.0, 21.0, 12.0);
+            pen.la(12.0, 3.0, 12.0, 21.0);
+        }
+        GeoGridPoints => {
+            for x in [5.0, 12.0, 19.0] {
+                for y in [5.0, 12.0, 19.0] {
+                    pen.dot(x, y);
+                }
+            }
+            pen.text(16.0, 9.0, "z", 6.0, a);
+        }
+        GeoStations => {
+            pen.poly(&[(2.0, 18.0), (9.0, 12.0), (16.0, 10.0), (22.0, 5.0)], false, b);
+            for (x, y, dx, dy) in [(5.5, 15.0, 0.65, 0.76), (12.5, 11.0, 0.28, 0.96), (19.0, 7.5, 0.64, 0.77)] {
+                pen.la(x - dx * 2.0, y - dy * 2.0, x + dx * 2.0, y + dy * 2.0);
+            }
+        }
+        GeoStl => {
+            // A terrain block in 3D.
+            pen.poly(&[(3.0, 15.0), (12.0, 20.0), (21.0, 15.0), (21.0, 10.0), (12.0, 15.0), (3.0, 10.0)], true, b);
+            pen.poly(&[(3.0, 10.0), (8.0, 5.0), (14.0, 8.0), (21.0, 10.0)], false, a);
+            pen.l(12.0, 15.0, 12.0, 20.0);
+        }
+        GeoSymbol => {
+            // A tree symbol and a manhole.
+            pen.c(8.0, 9.0, 5.0, b);
+            pen.dot(8.0, 9.0);
+            pen.c(17.0, 17.0, 3.5, a);
+        }
+        GeoCodes => {
+            // Coded points joined into a line and a symbol.
+            pen.poly(&[(3.0, 18.0), (10.0, 12.0), (18.0, 14.0)], false, b);
+            for (x, y) in [(3.0, 18.0), (10.0, 12.0), (18.0, 14.0)] {
+                pen.dot(x, y);
+            }
+            pen.text(12.0, 6.0, "PL", 6.0, a);
+        }
+        GeoFence => {
+            pen.l(2.0, 16.0, 22.0, 8.0);
+            for i in 0..5 {
+                let t = 0.1 + i as f32 * 0.2;
+                let (x, y) = (2.0 + 20.0 * t, 16.0 - 8.0 * t);
+                pen.la(x, y, x - 1.2, y - 3.0);
+            }
+        }
+        GeoSlope => {
+            // Top and bottom edges with long and short hachures.
+            pen.l(2.0, 6.0, 22.0, 6.0);
+            pen.l(2.0, 18.0, 22.0, 18.0);
+            for (i, x) in [4.0, 7.0, 10.0, 13.0, 16.0, 19.0].iter().enumerate() {
+                let end = if i % 2 == 0 { 18.0 } else { 12.0 };
+                pen.la(*x, 6.0, *x, end);
+            }
+        }
+        GeoMapSheets => {
+            pen.rect(2.0, 4.0, 20.0, 16.0, b);
+            pen.l(12.0, 4.0, 12.0, 20.0);
+            pen.l(2.0, 12.0, 22.0, 12.0);
+            pen.text(7.0, 8.0, "1", 6.0, a);
+        }
+        GeoCadastre => {
+            // Parcels with a number.
+            pen.poly(&[(2.0, 4.0), (22.0, 4.0), (22.0, 20.0), (2.0, 20.0)], true, b);
+            pen.l(11.0, 4.0, 13.0, 20.0);
+            pen.l(13.0, 13.0, 22.0, 11.0);
+            pen.text(6.5, 12.0, "1", 6.0, a);
+            pen.text(17.5, 7.5, "2", 6.0, a);
+        }
+        _ => {}
+    }
 }

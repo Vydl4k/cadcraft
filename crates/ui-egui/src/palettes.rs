@@ -324,6 +324,23 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoCross, "geopricne", "Cross Sections"),
             (Icon::GeoHypso, "geohypso", "Hypsometry"),
             (Icon::GeoBoundary, "geoobalka", "Terrain Model Boundary"),
+            (Icon::GeoFallLine, "geospadnice", "Fall Line"),
+            (Icon::GeoFlipEdge, "geohrana", "Flip Terrain Edge"),
+            (Icon::GeoGridPoints, "geomrizka", "Grid of Terrain Points"),
+            (Icon::GeoStations, "geostaniceni", "Stationing"),
+        ],
+    ),
+    (
+        "Map",
+        &[
+            (Icon::GeoCodes, "geokresba", "Draw from Point Codes"),
+            (Icon::GeoSymbol, "geoznacka", "Map Symbol"),
+            (Icon::GeoCadastre, "geovfk", "Import Cadastral Map (VFK)"),
+        ],
+        &[
+            (Icon::GeoFence, "geolinie", "Line Symbol"),
+            (Icon::GeoSlope, "geosvah", "Slope Hachures"),
+            (Icon::GeoMapSheets, "geomlisty", "Map Sheets"),
         ],
     ),
     (
@@ -348,7 +365,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
     (
         "Sheet and Exchange",
         &[(Icon::GeoSheet, "georam", "Sheet Frame and Title Block"), (Icon::PdfImport, "pdfimport", "PDF Import")],
-        &[(Icon::GeoLandXml, "geolandxml", "Export LandXML"), (Icon::GeoKml, "geokml", "Export KML")],
+        &[(Icon::GeoLandXml, "geolandxml", "Export LandXML"), (Icon::GeoKml, "geokml", "Export KML"), (Icon::GeoStl, "geostl", "Export STL")],
     ),
 ];
 
