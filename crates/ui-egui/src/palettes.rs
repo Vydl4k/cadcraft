@@ -323,8 +323,9 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoWall, "geozed", "Wall from Face"),
             (Icon::GeoOpening, "geootvor", "Window or Door"),
             (Icon::GeoTapeOutline, "geoomerne", "Outline from Tape Measurements"),
+            (Icon::GeoElevation, "geopohled", "Elevation or Section from Points"),
         ],
-        &[],
+        &[(Icon::GeoHeightMark, "geokota", "Height Mark")],
     ),
     ("Underlay", &[(Icon::PdfImport, "pdfimport", "PDF Import")], &[]),
 ];

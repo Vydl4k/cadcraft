@@ -173,6 +173,8 @@ pub enum Icon {
     GeoWall,
     GeoOpening,
     GeoTapeOutline,
+    GeoElevation,
+    GeoHeightMark,
     PdfImport,
 }
 
@@ -349,6 +351,28 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
                 pen.la(x, 14.0, x - 1.5, top + 1.5);
             }
             pen.l(4.0, 21.0, 20.0, 21.0);
+        }
+        GeoElevation => {
+            // A plan line on the left, its points carried up into an elevation on the right.
+            pen.l(2.0, 21.0, 22.0, 21.0);
+            pen.poly(&[(9.0, 21.0), (9.0, 9.0), (15.5, 4.0), (22.0, 9.0), (22.0, 21.0)], false, b);
+            for (x, y) in [(9.0, 9.0), (15.5, 4.0), (22.0, 9.0), (13.0, 14.0), (18.0, 14.0)] {
+                pen.dot(x, y);
+            }
+            pen.la(2.0, 3.0, 2.0, 18.0);
+            for y in [6.0, 11.0, 16.0] {
+                pen.la(3.5, y, 6.5, y);
+            }
+        }
+        GeoHeightMark => {
+            // A height mark: triangle on the line, leader and shelf.
+            pen.l(2.0, 18.0, 22.0, 18.0);
+            pen.poly(&[(8.0, 18.0), (5.5, 14.0), (10.5, 14.0)], true, a);
+            pen.la(8.0, 14.0, 8.0, 10.0);
+            pen.la(8.0, 10.0, 21.0, 10.0);
+            pen.l(10.0, 7.5, 13.0, 4.5);
+            pen.l(14.0, 7.5, 17.0, 4.5);
+            pen.l(18.0, 7.5, 20.0, 5.5);
         }
         GeoDesign => {
             // Rough ground and the designed platform with its slopes over it.

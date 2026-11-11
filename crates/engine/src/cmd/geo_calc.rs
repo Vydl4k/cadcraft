@@ -13,7 +13,6 @@ use cadcraft_doc::{Common, EntityKind, HAlign, Handle, Line, LwPolyline, Point, 
 use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use serde_json::{Value, json};
 
-use super::geo::{LAYER_NUMBERS, LAYER_POINTS};
 use super::geo_dmt::LAYER_TIN;
 use super::{CommandSpec, bad, f64_or, point_value, str_param};
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
@@ -761,55 +760,19 @@ fn run_geoseznam(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "geoseznam";
     let space = s.space();
     let decimals = p.get("decimals").and_then(Value::as_u64).unwrap_or(3).min(6) as usize;
-    let (pts, labels) = {
-        let d = s.doc()?;
-        let st = d.space(&space).ok_or_else(|| bad(CMD, "no drawing space"))?;
-        let pts: Vec<Vec3> = st
-            .iter()
-            .filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_POINTS))
-            .filter_map(|e| if let EntityKind::Point(q) = &e.kind { Some(q.p) } else { None })
-            .filter(|q| q.x.is_finite() && q.y.is_finite() && q.z.is_finite())
-            .collect();
-        let labels: Vec<(Vec2, f64, String)> = st
-            .iter()
-            .filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_NUMBERS))
-            .filter_map(|e| if let EntityKind::Text(t) = &e.kind { Some((t.insert.xy(), t.height, t.value.clone())) } else { None })
-            .collect();
-        (pts, labels)
-    };
-    if pts.is_empty() {
+    let numbered = super::geo_pohled::numbered_points(s, &space, None)?;
+    if numbered.is_empty() {
         return Err(bad(CMD, "no points on GEO_body"));
     }
+    let pts: Vec<Vec3> = numbered.iter().map(|(_, q)| *q).collect();
     let sjtsk = match p.get("sjtsk") {
         None => pts.iter().all(|q| q.x < -300_000.0 && q.y < -900_000.0),
         Some(Value::Bool(b)) => *b,
         Some(Value::String(t)) if t.eq_ignore_ascii_case("auto") => pts.iter().all(|q| q.x < -300_000.0 && q.y < -900_000.0),
         Some(_) => return Err(bad(CMD, "`sjtsk` must be true, false or \"auto\"")),
     };
-    // A point's number is the GEO_cisla text GEOBODY wrote beside it.
-    let mut grid: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
-    let cell = labels.iter().map(|l| l.1).fold(0.0f64, f64::max).max(0.01) * 4.0;
-    let ckey = |q: Vec2| ((q.x / cell).floor() as i64, (q.y / cell).floor() as i64);
-    for (i, l) in labels.iter().enumerate() {
-        grid.entry(ckey(l.0)).or_default().push(i);
-    }
     let mut out = String::new();
-    for (n, q) in pts.iter().enumerate() {
-        let (cx, cy) = ckey(q.xy());
-        let mut best: Option<(f64, &str)> = None;
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                for &i in grid.get(&(cx + dx, cy + dy)).map(Vec::as_slice).unwrap_or(&[]) {
-                    let Some((at, h, v)) = labels.get(i) else { continue };
-                    let want = Vec2::new(q.x + 0.6 * h, q.y + 0.25 * h);
-                    let d = (at.x - want.x).hypot(at.y - want.y);
-                    if d < 0.5 * h && best.is_none_or(|(bd, _)| d < bd) {
-                        best = Some((d, v.as_str()));
-                    }
-                }
-            }
-        }
-        let num = best.map_or_else(|| format!("{}", n + 1), |(_, v)| v.to_string());
+    for (num, q) in &numbered {
         let (yy, xx) = if sjtsk { (-q.x, -q.y) } else { (q.x, q.y) };
         out.push_str(&format!("{num} {yy:.decimals$} {xx:.decimals$} {:.decimals$}\n", q.z));
     }

@@ -88,7 +88,7 @@ fn columns(spec: &str) -> std::result::Result<Vec<Col>, String> {
 }
 
 /// Text of a coordinate list: UTF-8, else Windows-1250 (Czech Windows programs).
-fn decode(bytes: &[u8]) -> String {
+pub(super) fn decode(bytes: &[u8]) -> String {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
     match std::str::from_utf8(bytes) {
         Ok(s) => s.to_string(),
