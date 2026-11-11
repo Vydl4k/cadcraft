@@ -9,6 +9,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+# Constrained Delaunay triangulation for the survey add-on's terrain model (MIT OR Apache-2.0).
+spade = "2.15"
 cadcraft-geom = { workspace = true }
 cadcraft-color = { workspace = true }
 cadcraft-doc = { workspace = true }

@@ -16,6 +16,7 @@ mod exchange;
 pub mod file;
 /// Survey add-on (coordinate lists, terrain, map symbols).
 pub mod geo;
+mod geo_dmt;
 mod gripcmds;
 mod griphot;
 pub(crate) mod groups;
@@ -207,6 +208,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(image::specs());
         v.extend(pdfimport::specs());
         v.extend(geo::specs());
+        v.extend(geo_dmt::specs());
         v.extend(props::specs());
         v.extend(inquiry::specs());
         v.extend(settings::specs());
