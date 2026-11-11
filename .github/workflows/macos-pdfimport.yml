@@ -5,7 +5,7 @@ name: macOS build (PDFIMPORT)
 
 on:
   push:
-    branches: [pdfimport]
+    branches: [pdfimport, geo]
   workflow_dispatch:
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
 
       - name: Build and package (ad-hoc signed)
         env:
-          CADCRAFT_VERSION: 0.14.0-pdfimport
+          CADCRAFT_VERSION: 0.14.0-${{ github.ref_name }}
         # The log's tail becomes annotations, which show without signing in to GitHub.
         run: |
           set -o pipefail
@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CADCraft-pdfimport-macos-aarch64
+          name: CADCraft-${{ github.ref_name }}-macos-aarch64
           path: dist/release/*.dmg
           if-no-files-found: error
           retention-days: 30
