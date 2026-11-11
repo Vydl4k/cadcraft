@@ -108,7 +108,7 @@ pub struct UiState {
     /// pointer"), screen readers, recorders and remote desktops track the system cursor and lose it
     /// when it is hidden. Off unless the host defaults to it ([`CadApp::set_system_cursor_default`]).
     pub system_cursor: bool,
-    /// "Drafting" or "Modeling".
+    /// One of `palettes::TOOLSET_TABS`: "Drafting", "Modeling" or "Geo".
     pub toolset_tab: String,
     pub collapsed_groups: Vec<String>,
     /// Tools the user took out of the Tool Sets palette (command ids); each category's gear

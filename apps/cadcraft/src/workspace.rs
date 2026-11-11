@@ -25,8 +25,8 @@ pub struct Workspace {
 
 fn snapshot(ui: &UiState) -> Result<Value, String> {
     cadcraft_ui_egui::docking::validate(&ui.docking)?;
-    if !matches!(ui.toolset_tab.as_str(), "Drafting" | "Modeling") {
-        return Err("toolsetTab must be Drafting or Modeling".into());
+    if !cadcraft_ui_egui::palettes::TOOLSET_TABS.contains(&ui.toolset_tab.as_str()) {
+        return Err(format!("toolsetTab must be one of {}", cadcraft_ui_egui::palettes::TOOLSET_TABS.join(", ")));
     }
     if ui.collapsed_groups.len() > 64 || ui.collapsed_groups.iter().any(|name| name.len() > 256) {
         return Err("collapsedGroups exceeds the workspace size limit".into());
@@ -240,6 +240,23 @@ mod tests {
         first.save_if_changed(&transient_only, Instant::now()).unwrap();
         assert_eq!(fs::read(&path).unwrap(), bytes);
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn every_tool_sets_tab_is_saved_and_restored() {
+        // The Geo tab was refused ("toolsetTab must be Drafting or Modeling") and the workspace
+        // was not saved while it was open.
+        for tab in cadcraft_ui_egui::palettes::TOOLSET_TABS {
+            let directory = temp_dir();
+            let path = directory.join("workspace.json");
+            let (mut store, _, _) = Workspace::at(Some(path.clone()));
+            let ui = UiState { toolset_tab: tab.into(), history_lines: 5, ..Default::default() };
+            store.save_if_changed(&ui, Instant::now()).unwrap();
+            let (_, reloaded, error) = Workspace::at(Some(path));
+            assert!(error.is_none(), "{tab}: {error:?}");
+            assert_eq!(reloaded.unwrap().toolset_tab, tab);
+            fs::remove_dir_all(directory).unwrap();
+        }
     }
 
     #[test]

@@ -148,10 +148,9 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
         // Tabs.
         let tab_h = 28.0;
         let mut x = r.left();
-        const TABS: [&str; 3] = ["Drafting", "Modeling", "Geo"];
         // The tabs share the strip, leaving room for the collapse control.
-        let w = ((r.width() - 28.0) / TABS.len() as f32).clamp(52.0, 92.0);
-        for name in TABS {
+        let w = ((r.width() - 28.0) / TOOLSET_TABS.len() as f32).clamp(52.0, 92.0);
+        for name in TOOLSET_TABS {
             let tr = Rect::from_min_size(pos2(x, r.top()), vec2(w, tab_h));
             let active = app.ui.toolset_tab == name;
             let resp = ui.interact(tr, ui.scope_id().with(("ts", name)), Sense::click());
@@ -297,6 +296,9 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
 }
 
 /// The survey add-on's tool set: points, terrain, buildings and PDF underlays.
+/// The Tool Sets tabs, in order; the workspace accepts these as `toolsetTab`.
+pub const TOOLSET_TABS: [&str; 3] = ["Drafting", "Modeling", "Geo"];
+
 pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
     (
         "Survey Points",
