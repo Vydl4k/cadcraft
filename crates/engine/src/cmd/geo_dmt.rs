@@ -62,7 +62,7 @@ impl HasPosition for V {
     }
 }
 
-fn ensure_layer(s: &mut Session, name: &str, aci: i16) -> Result<()> {
+fn ensure_layer(s: &mut Session, name: &str, aci: u8) -> Result<()> {
     let d = s.doc_mut()?;
     if d.ensure_layer(name)
         && let Some(l) = d.layer_mut(name)
@@ -75,7 +75,8 @@ fn ensure_layer(s: &mut Session, name: &str, aci: i16) -> Result<()> {
 /// Erase every object on `layer` in `space`.
 fn clear_layer(s: &mut Session, space: &Space, layer: &str) -> Result<usize> {
     let d = s.doc_mut()?;
-    let doomed: Vec<Handle> = d.space(space).map(|st| st.iter().filter(|e| e.common.layer.eq_ignore_ascii_case(layer)).map(|e| e.handle).collect()).unwrap_or_default();
+    let doomed: Vec<Handle> =
+        d.space(space).map(|st| st.iter().filter(|e| e.common.layer.eq_ignore_ascii_case(layer)).map(|e| e.handle).collect()).unwrap_or_default();
     for h in &doomed {
         d.remove_entity(*h);
     }
@@ -195,6 +196,9 @@ fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// Where the level `l` crosses the edge a–b (heights on either side of it).
 fn cross(a: Vec3, b: Vec3, l: f64) -> Vec2 {
+    // The same edge is cut from both of its triangles: order its ends so both get the very same
+    // point, and the contour joins up.
+    let (a, b) = if (a.x, a.y, a.z) <= (b.x, b.y, b.z) { (a, b) } else { (b, a) };
     let t = (l - a.z) / (b.z - a.z);
     Vec2::new(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y))
 }
@@ -211,7 +215,9 @@ fn tri_segment(t: [Vec3; 3], l: f64) -> Option<(Vec2, Vec2)> {
     let a = *t.get(lone)?;
     let b = *t.get((lone + 1) % 3)?;
     let c = *t.get((lone + 2) % 3)?;
-    Some((cross(a, b, l), cross(a, c, l)))
+    let (p, q) = (cross(a, b, l), cross(a, c, l));
+    // A corner exactly at the level touches it in a point, which is no contour.
+    ((p.x - q.x).hypot(p.y - q.y) > 1e-9).then_some((p, q))
 }
 
 /// Join segments into polylines by their shared ends.
@@ -235,8 +241,7 @@ fn chain(segs: Vec<(Vec2, Vec2)>) -> Vec<(Vec<Vec2>, bool)> {
         let mut line = std::collections::VecDeque::from([a, b]);
         // Grow forward from the back, then backward from the front.
         for forward in [true, false] {
-            loop {
-                let Some(&tip) = (if forward { line.back() } else { line.front() }) else { break };
+            while let Some(&tip) = if forward { line.back() } else { line.front() } {
                 let next = ends.get(&key(tip)).and_then(|c| c.iter().copied().find(|i| !used.get(*i).copied().unwrap_or(true)));
                 let Some(i) = next else { break };
                 if let Some(u) = used.get_mut(i) {
@@ -305,7 +310,11 @@ fn run_geovrstevnice(s: &mut Session, p: &Value) -> Result<Value> {
             _ => None,
         };
         let from_sel: Vec<_> = chosen.iter().filter_map(|h| st.get(*h)).filter_map(|e| face(e)).collect();
-        if from_sel.is_empty() { st.iter().filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_TIN)).filter_map(|e| face(e)).collect() } else { from_sel }
+        if from_sel.is_empty() {
+            st.iter().filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_TIN)).filter_map(|e| face(e)).collect()
+        } else {
+            from_sel
+        }
     };
     let tris: Vec<_> = tris.into_iter().filter(|t| t.iter().all(|v| v.x.is_finite() && v.y.is_finite() && v.z.is_finite())).collect();
     if tris.is_empty() {
@@ -325,10 +334,25 @@ fn run_geovrstevnice(s: &mut Session, p: &Value) -> Result<Value> {
     }
     ensure_layer(s, LAYER_MAIN, 34)?;
     ensure_layer(s, LAYER_MINOR, 32)?;
+    {
+        // Index contours are drawn heavier than the others.
+        let d = s.doc_mut()?;
+        for (name, lw) in [(LAYER_MAIN, 35), (LAYER_MINOR, 13)] {
+            if let Some(l) = d.layer_mut(name) {
+                l.lineweight = cadcraft_doc::Lineweight::from_dxf(lw);
+            }
+        }
+    }
     ensure_layer(s, LAYER_LABELS, 34)?;
     let labels = bool_or(p, "labels", true);
     let h = 0.0015 * scale;
-    let decimals = if interval.fract() == 0.0 { 0 } else if (interval * 10.0).fract().abs() < 1e-9 { 1 } else { 2 };
+    let decimals = if interval.fract() == 0.0 {
+        0
+    } else if (interval * 10.0).fract().abs() < 1e-9 {
+        1
+    } else {
+        2
+    };
     let base = s.current_common();
     let mut contours = 0usize;
     let mut segments = 0usize;
@@ -453,14 +477,19 @@ mod tests {
         // Levels 100..104, each one straight line across.
         assert_eq!(r["levels"], 5);
         let d = s.doc().unwrap();
-        let contours: Vec<_> = d.model.iter().filter_map(|e| if let EntityKind::LwPolyline(p) = &e.kind { Some((e.common.layer.clone(), p.clone())) } else { None }).collect();
+        let contours: Vec<_> = d
+            .model
+            .iter()
+            .filter_map(|e| if let EntityKind::LwPolyline(p) = &e.kind { Some((e.common.layer.clone(), p.clone())) } else { None })
+            .collect();
         let at_102: Vec<_> = contours.iter().filter(|(_, p)| (p.elevation - 102.0).abs() < 1e-9).collect();
         assert_eq!(at_102.len(), 1, "{contours:?}");
         let (layer, pl) = at_102[0];
         assert_eq!(layer, LAYER_MAIN);
         assert!(pl.vertices.iter().all(|v| (v.p.x - 20.0).abs() < 1e-9), "{pl:?}");
         let labels = d.model.iter().filter(|e| e.common.layer == LAYER_LABELS).count();
-        assert!(labels >= 3, "{labels}");
+        // 100 is the model's lowest edge (no crossing), 102 and 104 are labelled.
+        assert!(labels >= 2, "{labels}");
         // Running it again replaces, not adds.
         let n = d.model.iter().count();
         s.execute("geovrstevnice", &json!({ "interval": 1, "main": 2 })).unwrap();
@@ -474,6 +503,13 @@ mod tests {
         assert_eq!(s.execute("geodmt", &json!({})).unwrap()["triangles"], 2);
         assert_eq!(s.execute("geodmt", &json!({ "maxEdge": 20 })).unwrap()["triangles"], 1);
         assert_eq!(faces(&s).len(), 1);
+    }
+
+    #[test]
+    fn a_corner_at_the_level_is_no_contour() {
+        let t = [Vec3::new(0.0, 0.0, 5.0), Vec3::new(1.0, 0.0, 4.0), Vec3::new(0.0, 1.0, 4.0)];
+        assert_eq!(tri_segment(t, 5.0), None);
+        assert!(tri_segment(t, 4.5).is_some());
     }
 
     #[test]

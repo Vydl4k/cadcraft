@@ -5,7 +5,7 @@ name: macOS build (PDFIMPORT)
 
 on:
   push:
-    branches: [pdfimport, geo]
+    branches: [pdfimport, geo, michal]
   workflow_dispatch:
 
 permissions:
