@@ -25,6 +25,7 @@ mod geo_rek;
 mod geo_rezy;
 mod geo_tools;
 mod geo_vol;
+mod geo_vypocty;
 mod gripcmds;
 mod griphot;
 pub(crate) mod groups;
@@ -223,6 +224,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_ram::specs());
         v.extend(geo_rezy::specs());
         v.extend(geo_hypso::specs());
+        v.extend(geo_vypocty::specs());
         v.extend(geo_rek::specs());
         v.extend(geo_tools::specs());
         v.extend(props::specs());
