@@ -258,7 +258,7 @@ pub(super) fn add(s: &mut Session, space: &Space, layer: &str, kind: EntityKind)
 }
 
 /// The one handle named by `key`, else the single selected object.
-fn one_target(s: &Session, p: &Value, key: &str, cmd: &str) -> Result<Handle> {
+pub(super) fn one_target(s: &Session, p: &Value, key: &str, cmd: &str) -> Result<Handle> {
     if let Some(v) = p.get(key) {
         return v
             .as_str()
@@ -703,6 +703,17 @@ fn run_geoprofil(s: &mut Session, p: &Value) -> Result<Value> {
     // Datum line and its label.
     add(s, &space, LAYER_PROFILE, EntityKind::Line(Line { a: Vec3::new(at.x, at.y, 0.0), b: Vec3::new(at.x + length, at.y, 0.0) }))?;
     text(s, &space, LAYER_PROFILE, Vec2::new(at.x - th, at.y), th, format!("S.R. {datum:.2}"), 0.0, (HAlign::Right, VAlign::Middle))?;
+    // GEONIVELETA reads the exaggeration back from here.
+    text(
+        s,
+        &space,
+        LAYER_PROFILE,
+        Vec2::new(at.x - th, at.y - 1.5 * th),
+        th * 0.8,
+        format!("převýšení {ex}×"),
+        0.0,
+        (HAlign::Right, VAlign::Middle),
+    )?;
     // Stations: a tick, the station below the datum and the height above the terrain.
     let n = (length / step).floor() as usize;
     let mut stations: Vec<f64> = (0..=n).map(|i| i as f64 * step).collect();
