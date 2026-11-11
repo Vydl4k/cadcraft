@@ -175,6 +175,16 @@ pub enum Icon {
     GeoTapeOutline,
     GeoElevation,
     GeoHeightMark,
+    GeoGrade,
+    GeoCross,
+    GeoHypso,
+    GeoPolar,
+    GeoStakeout,
+    GeoHelmert,
+    GeoRenumber,
+    GeoSheet,
+    GeoLandXml,
+    GeoKml,
     PdfImport,
 }
 
@@ -373,6 +383,89 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
             pen.l(10.0, 7.5, 13.0, 4.5);
             pen.l(14.0, 7.5, 17.0, 4.5);
             pen.l(18.0, 7.5, 20.0, 5.5);
+        }
+        GeoGrade => {
+            // Terrain in a profile with a straight grade line through it.
+            pen.l(2.0, 21.0, 22.0, 21.0);
+            pen.poly(&[(2.0, 12.0), (7.0, 8.0), (12.0, 10.0), (17.0, 5.0), (22.0, 9.0)], false, b);
+            pen.poly(&[(2.0, 16.0), (12.0, 11.0), (22.0, 14.0)], false, a);
+            for (x, y) in [(2.0, 16.0), (12.0, 11.0), (22.0, 14.0)] {
+                pen.dot(x, y);
+            }
+        }
+        GeoCross => {
+            // An axis in plan crossed by section lines, one section drawn above.
+            pen.l(12.0, 22.0, 12.0, 12.0);
+            for y in [14.0, 18.0, 22.0] {
+                pen.la(6.0, y, 18.0, y);
+            }
+            pen.poly(&[(3.0, 9.0), (8.0, 5.0), (12.0, 4.0), (16.0, 6.0), (21.0, 8.0)], false, b);
+            pen.la(3.0, 7.0, 21.0, 7.0);
+        }
+        GeoHypso => {
+            // Height bands as coloured rings.
+            let colours = [(60, 141, 47), (232, 212, 77), (156, 91, 46)];
+            for (i, r) in [9.0f32, 6.0, 3.0].iter().enumerate() {
+                let (cr, cg, cb) = colours.get(i).copied().unwrap_or((128, 128, 128));
+                let c = if dim { Color32::from_rgb(cr, cg, cb).gamma_multiply(0.4) } else { Color32::from_rgb(cr, cg, cb) };
+                pen.p.circle_filled(pen.at(12.0, 12.0), pen.r.width() * r / 24.0, c);
+            }
+        }
+        GeoPolar => {
+            // A station, its orientation and a measured point.
+            pen.c(5.0, 19.0, 2.0, b);
+            pen.dot(5.0, 19.0);
+            pen.la(5.0, 19.0, 5.0, 3.0);
+            pen.l(5.0, 19.0, 20.0, 8.0);
+            pen.dot(20.0, 8.0);
+            // From north (up) round to the measured direction.
+            pen.arc(5.0, 19.0, 7.0, 90.0, 36.0, a);
+        }
+        GeoStakeout => {
+            // A stake with a flag at a point, and the distance to it.
+            pen.l(14.0, 21.0, 14.0, 6.0);
+            pen.poly(&[(14.0, 6.0), (20.0, 8.5), (14.0, 11.0)], true, a);
+            pen.c(4.0, 20.0, 1.5, b);
+            pen.la(5.5, 20.0, 13.0, 20.0);
+            pen.la(4.0, 18.5, 4.0, 10.0);
+        }
+        GeoHelmert => {
+            // A triangle of identical points moved, turned and scaled onto another.
+            pen.poly(&[(3.0, 18.0), (9.0, 20.0), (5.0, 12.0)], true, b);
+            pen.poly(&[(13.0, 10.0), (21.0, 7.0), (19.0, 18.0)], true, a);
+            pen.l(9.0, 14.0, 14.0, 14.0);
+            pen.arrow_tip(14.0, 14.0, 1.0, 0.0, b);
+        }
+        GeoRenumber => {
+            // A point with its number and a magnifier.
+            pen.dot(5.0, 18.0);
+            pen.text(9.0, 18.0, "12", 7.0, a);
+            pen.c(15.0, 8.0, 4.5, b);
+            pen.la(18.2, 11.2, 22.0, 15.0);
+        }
+        GeoSheet => {
+            // A sheet with its border and title block.
+            pen.rect(2.0, 4.0, 20.0, 16.0, b);
+            pen.rect(4.0, 6.0, 16.0, 12.0, b);
+            pen.la(12.0, 14.0, 20.0, 14.0);
+            pen.la(12.0, 14.0, 12.0, 18.0);
+            pen.la(12.0, 16.0, 20.0, 16.0);
+        }
+        GeoLandXml => {
+            // A TIN corner with the tag brackets of XML.
+            pen.poly(&[(4.0, 18.0), (11.0, 20.0), (8.0, 12.0)], true, b);
+            pen.l(11.0, 20.0, 15.0, 13.0);
+            pen.l(8.0, 12.0, 15.0, 13.0);
+            pen.poly(&[(17.0, 4.0), (14.0, 7.0), (17.0, 10.0)], false, a);
+            pen.poly(&[(20.0, 4.0), (23.0, 7.0), (20.0, 10.0)], false, a);
+        }
+        GeoKml => {
+            // A globe with a pin.
+            pen.c(12.0, 13.0, 8.0, b);
+            pen.la(4.0, 13.0, 20.0, 13.0);
+            pen.arc(12.0, 13.0, 4.0, -90.0, 90.0, b);
+            pen.c(16.0, 6.0, 2.5, a);
+            pen.l(16.0, 8.5, 16.0, 12.0);
         }
         GeoDesign => {
             // Rough ground and the designed platform with its slopes over it.

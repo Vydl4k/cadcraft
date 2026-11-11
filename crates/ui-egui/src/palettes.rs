@@ -317,7 +317,22 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoVolumes, "geokubatury", "Cut and Fill Volumes"),
             (Icon::GeoProfile, "geoprofil", "Long Section"),
         ],
-        &[(Icon::GeoDesign, "geonavrh", "Design Surface"), (Icon::GeoVolumesBetween, "georozdil", "Volumes Between Two Terrains")],
+        &[
+            (Icon::GeoDesign, "geonavrh", "Design Surface"),
+            (Icon::GeoVolumesBetween, "georozdil", "Volumes Between Two Terrains"),
+            (Icon::GeoGrade, "geoniveleta", "Grade Line"),
+            (Icon::GeoCross, "geopricne", "Cross Sections"),
+            (Icon::GeoHypso, "geohypso", "Hypsometry"),
+        ],
+    ),
+    (
+        "Calculations",
+        &[
+            (Icon::GeoPolar, "geopolarni", "Polar Method"),
+            (Icon::GeoStakeout, "geovytyc", "Setting Out"),
+            (Icon::GeoHelmert, "geohelmert", "Helmert Transformation"),
+        ],
+        &[(Icon::GeoRenumber, "geocisla", "Find or Renumber Points")],
     ),
     (
         "Building",
@@ -329,7 +344,11 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
         ],
         &[(Icon::GeoHeightMark, "geokota", "Height Mark")],
     ),
-    ("Underlay", &[(Icon::PdfImport, "pdfimport", "PDF Import")], &[]),
+    (
+        "Sheet and Exchange",
+        &[(Icon::GeoSheet, "georam", "Sheet Frame and Title Block"), (Icon::PdfImport, "pdfimport", "PDF Import")],
+        &[(Icon::GeoLandXml, "geolandxml", "Export LandXML"), (Icon::GeoKml, "geokml", "Export KML")],
+    ),
 ];
 
 pub const MODELING: &[(&str, &[Tool], &[Tool])] = &[
