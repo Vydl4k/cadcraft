@@ -38,6 +38,10 @@ pub(super) fn specs() -> Vec<CommandSpec> {
             .alias(&["geodiff", "geokub2"])
             .params("{existing?: layer of the existing terrain's 3DFACEs (default GEO_DMT), design?: layer of the design's (default GEO_DMT_navrh), boundary?: handle of a closed polyline (default: wherever both models are), label?: bool (default true), zeroLine?: bool, draw where cut turns into fill (default true)} → {cut, fill, net, area, zeroLines, message}")
             .interactive(|_| Ok(Box::new(RozdilM))),
+        CommandSpec::new("geoobalka", "Terrain Model Boundary", run_geoobalka)
+            .menu(&["Geo", "Terrain Model Boundary"])
+            .alias(&["geoboundary"])
+            .params("{layer?: the TIN's layer (default GEO_DMT)} → {boundaries, handles, message}: closed polylines along the model's outer edges (and around its holes), on GEO_DMT_hranice"),
     ]
 }
 
@@ -321,6 +325,45 @@ fn run_georozdil(s: &mut Session, p: &Value) -> Result<Value> {
     }))
 }
 
+pub const LAYER_BOUNDARY: &str = "GEO_DMT_hranice";
+
+/// The edges of `tris` that belong to one triangle only, chained into closed loops.
+pub fn boundary(tris: &[[Vec3; 3]]) -> Vec<Vec<Vec2>> {
+    let key = |p: Vec2| ((p.x * 1000.0).round() as i64, (p.y * 1000.0).round() as i64);
+    let mut count: std::collections::HashMap<((i64, i64), (i64, i64)), (usize, Vec2, Vec2)> = std::collections::HashMap::new();
+    for t in tris {
+        for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            let (ka, kb) = (key(a.xy()), key(b.xy()));
+            if ka == kb {
+                continue;
+            }
+            let k = if ka < kb { (ka, kb) } else { (kb, ka) };
+            count.entry(k).or_insert((0, a.xy(), b.xy())).0 += 1;
+        }
+    }
+    let segs: Vec<(Vec2, Vec2)> = count.into_values().filter(|(n, ..)| *n == 1).map(|(_, a, b)| (a, b)).collect();
+    chain(segs).into_iter().map(|(v, _)| v).filter(|v| v.len() >= 3).collect()
+}
+
+fn run_geoobalka(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "geoobalka";
+    let space = s.space();
+    let layer = layer_param(p, "layer", LAYER_TIN)?;
+    let tris = tin_on(s, &space, &layer)?;
+    if tris.is_empty() {
+        return Err(bad(CMD, format!("no terrain model on {layer}: run GEODMT first")));
+    }
+    let loops = boundary(&tris);
+    ensure_layer(s, LAYER_BOUNDARY, 2)?;
+    let mut handles = Vec::new();
+    for v in loops {
+        let pl =
+            LwPolyline { vertices: v.into_iter().map(PolyVertex::new).collect(), closed: true, const_width: 0.0, elevation: 0.0, plinegen: false };
+        handles.push(add(s, &space, LAYER_BOUNDARY, EntityKind::LwPolyline(pl))?.hex());
+    }
+    Ok(json!({ "boundaries": handles.len(), "handles": handles, "message": format!("{} boundary polylines of the terrain model", handles.len()) }))
+}
+
 struct RozdilM;
 
 impl Interactive for RozdilM {
@@ -463,6 +506,24 @@ mod tests {
         assert!((r["cut"].as_f64().unwrap() - 400.0).abs() < 1e-6, "{r}");
         assert!(s.execute("geodmt", &json!({ "layer": "a/b" })).is_err());
         assert!(s.execute("geodmt", &json!({ "layer": 5 })).is_err());
+    }
+
+    #[test]
+    fn the_model_boundary_is_one_loop_around_it() {
+        let loops = boundary(&surface(4, false, |_, _| 0.0, Vec2::ZERO));
+        assert_eq!(loops.len(), 1);
+        let area: f64 = signed_area(&loops[0]).abs();
+        assert!((area - 400.0).abs() < 1e-9, "{area}");
+        let mut s = Session::new();
+        assert!(s.execute("geoobalka", &json!({})).is_err());
+        faces(&mut s, LAYER_TIN, &surface(2, false, |_, _| 0.0, Vec2::ZERO));
+        let r = s.execute("geoobalka", &json!({})).unwrap();
+        assert_eq!(r["boundaries"], 1);
+        // The boundary is a usable GEOROZDIL boundary.
+        faces(&mut s, LAYER_DESIGN, &surface(2, false, |_, _| 1.0, Vec2::ZERO));
+        let b = r["handles"][0].clone();
+        let r = s.execute("georozdil", &json!({ "boundary": b, "label": false })).unwrap();
+        assert!((r["fill"].as_f64().unwrap() - 400.0).abs() < 1e-6, "{r}");
     }
 
     #[test]

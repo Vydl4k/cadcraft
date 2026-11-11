@@ -185,6 +185,7 @@ pub enum Icon {
     GeoSheet,
     GeoLandXml,
     GeoKml,
+    GeoBoundary,
     PdfImport,
 }
 
@@ -458,6 +459,16 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
             pen.l(8.0, 12.0, 15.0, 13.0);
             pen.poly(&[(17.0, 4.0), (14.0, 7.0), (17.0, 10.0)], false, a);
             pen.poly(&[(20.0, 4.0), (23.0, 7.0), (20.0, 10.0)], false, a);
+        }
+        GeoBoundary => {
+            // Triangles inside, their outer edge drawn heavy.
+            let v = [(3.0, 17.0), (8.0, 5.0), (17.0, 4.0), (21.0, 13.0), (14.0, 20.0)];
+            for (i, j) in [(0, 2), (2, 4), (1, 2)] {
+                if let (Some(p), Some(q)) = (v.get(i), v.get(j)) {
+                    pen.l(p.0, p.1, q.0, q.1);
+                }
+            }
+            pen.poly(&v, true, a);
         }
         GeoKml => {
             // A globe with a pin.

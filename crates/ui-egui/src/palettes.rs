@@ -323,6 +323,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoGrade, "geoniveleta", "Grade Line"),
             (Icon::GeoCross, "geopricne", "Cross Sections"),
             (Icon::GeoHypso, "geohypso", "Hypsometry"),
+            (Icon::GeoBoundary, "geoobalka", "Terrain Model Boundary"),
         ],
     ),
     (
