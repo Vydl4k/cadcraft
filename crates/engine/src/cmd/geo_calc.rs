@@ -58,11 +58,16 @@ pub(super) fn specs() -> Vec<CommandSpec> {
 
 /// The TIN's triangles in `space`.
 pub(super) fn tin(s: &Session, space: &Space) -> Result<Vec<[Vec3; 3]>> {
+    tin_on(s, space, LAYER_TIN)
+}
+
+/// The triangles (3DFACEs) on `layer` in `space`.
+pub(super) fn tin_on(s: &Session, space: &Space, layer: &str) -> Result<Vec<[Vec3; 3]>> {
     let d = s.doc()?;
     let Some(st) = d.space(space) else { return Ok(Vec::new()) };
     Ok(st
         .iter()
-        .filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_TIN))
+        .filter(|e| e.common.layer.eq_ignore_ascii_case(layer))
         .filter_map(|e| match &e.kind {
             EntityKind::Face3d(f) => {
                 let [a, b, c, _] = f.corners;
@@ -78,7 +83,7 @@ fn no_tin(cmd: &str) -> EngineError {
 }
 
 /// The plane z = a·x + b·y + c through a triangle, or `None` for a vertical or degenerate one.
-fn plane(t: &[Vec3; 3]) -> Option<(f64, f64, f64)> {
+pub(super) fn plane(t: &[Vec3; 3]) -> Option<(f64, f64, f64)> {
     let [p, q, r] = *t;
     let (ux, uy, uz) = (q.x - p.x, q.y - p.y, q.z - p.z);
     let (vx, vy, vz) = (r.x - p.x, r.y - p.y, r.z - p.z);
@@ -92,17 +97,17 @@ fn plane(t: &[Vec3; 3]) -> Option<(f64, f64, f64)> {
     [a, b, c].iter().all(|v| v.is_finite()).then_some((a, b, c))
 }
 
-fn cross2(o: Vec2, a: Vec2, b: Vec2) -> f64 {
+pub(super) fn cross2(o: Vec2, a: Vec2, b: Vec2) -> f64 {
     (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
 }
 
-fn signed_area(p: &[Vec2]) -> f64 {
+pub(super) fn signed_area(p: &[Vec2]) -> f64 {
     let n = p.len();
     (0..n).map(|i| p.get(i).zip(p.get((i + 1) % n)).map_or(0.0, |(a, b)| a.x * b.y - b.x * a.y)).sum::<f64>() / 2.0
 }
 
 /// Area and centroid of a polygon.
-fn area_centroid(p: &[Vec2]) -> (f64, Vec2) {
+pub(super) fn area_centroid(p: &[Vec2]) -> (f64, Vec2) {
     let n = p.len();
     let (mut a2, mut cx, mut cy) = (0.0, 0.0, 0.0);
     for i in 0..n {
@@ -128,7 +133,7 @@ fn point_in_tri(p: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
 }
 
 /// Ear-clip a simple polygon into triangles (counter-clockwise).
-fn ear_clip(poly: &[Vec2]) -> Vec<[Vec2; 3]> {
+pub(super) fn ear_clip(poly: &[Vec2]) -> Vec<[Vec2; 3]> {
     let mut v: Vec<Vec2> = poly.to_vec();
     v.dedup_by(|a, b| (a.x - b.x).abs() < 1e-9 && (a.y - b.y).abs() < 1e-9);
     if v.len() > 2 && v.first().zip(v.last()).is_some_and(|(f, l)| (f.x - l.x).abs() < 1e-9 && (f.y - l.y).abs() < 1e-9) {
@@ -170,7 +175,7 @@ fn ear_clip(poly: &[Vec2]) -> Vec<[Vec2; 3]> {
 }
 
 /// Clip a polygon to the half-plane where `f(p) >= 0` (f linear).
-fn clip_half(poly: &[Vec2], f: impl Fn(Vec2) -> f64) -> Vec<Vec2> {
+pub(super) fn clip_half(poly: &[Vec2], f: impl Fn(Vec2) -> f64) -> Vec<Vec2> {
     let n = poly.len();
     let mut out = Vec::with_capacity(n + 2);
     for i in 0..n {
@@ -188,7 +193,7 @@ fn clip_half(poly: &[Vec2], f: impl Fn(Vec2) -> f64) -> Vec<Vec2> {
 }
 
 /// Clip a convex polygon to a counter-clockwise triangle.
-fn clip_to_tri(poly: &[Vec2], t: &[Vec2; 3]) -> Vec<Vec2> {
+pub(super) fn clip_to_tri(poly: &[Vec2], t: &[Vec2; 3]) -> Vec<Vec2> {
     let mut p = poly.to_vec();
     for i in 0..3 {
         let (Some(&a), Some(&b)) = (t.get(i), t.get((i + 1) % 3)) else { continue };
@@ -200,17 +205,17 @@ fn clip_to_tri(poly: &[Vec2], t: &[Vec2; 3]) -> Vec<Vec2> {
     p
 }
 
-fn bbox(p: &[Vec2]) -> (Vec2, Vec2) {
+pub(super) fn bbox(p: &[Vec2]) -> (Vec2, Vec2) {
     p.iter().fold((Vec2::new(f64::INFINITY, f64::INFINITY), Vec2::new(f64::NEG_INFINITY, f64::NEG_INFINITY)), |(lo, hi), v| {
         (Vec2::new(lo.x.min(v.x), lo.y.min(v.y)), Vec2::new(hi.x.max(v.x), hi.y.max(v.y)))
     })
 }
 
-fn overlaps(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
+pub(super) fn overlaps(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
     a.0.x <= b.1.x && b.0.x <= a.1.x && a.0.y <= b.1.y && b.0.y <= a.1.y
 }
 
-fn ensure_layer(s: &mut Session, name: &str, aci: u8) -> Result<()> {
+pub(super) fn ensure_layer(s: &mut Session, name: &str, aci: u8) -> Result<()> {
     let d = s.doc_mut()?;
     if d.ensure_layer(name)
         && let Some(l) = d.layer_mut(name)
@@ -221,7 +226,16 @@ fn ensure_layer(s: &mut Session, name: &str, aci: u8) -> Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn text(s: &mut Session, space: &Space, layer: &str, at: Vec2, h: f64, value: String, rot: f64, align: (HAlign, VAlign)) -> Result<Handle> {
+pub(super) fn text(
+    s: &mut Session,
+    space: &Space,
+    layer: &str,
+    at: Vec2,
+    h: f64,
+    value: String,
+    rot: f64,
+    align: (HAlign, VAlign),
+) -> Result<Handle> {
     let anchored = align != (HAlign::Left, VAlign::Baseline);
     let t = Text {
         insert: Vec3::new(at.x, at.y, 0.0),
@@ -239,7 +253,7 @@ fn text(s: &mut Session, space: &Space, layer: &str, at: Vec2, h: f64, value: St
     s.doc_mut()?.add(space, common, EntityKind::Text(t)).map_err(|e| bad("geo", e.to_string()))
 }
 
-fn add(s: &mut Session, space: &Space, layer: &str, kind: EntityKind) -> Result<Handle> {
+pub(super) fn add(s: &mut Session, space: &Space, layer: &str, kind: EntityKind) -> Result<Handle> {
     let common = Common { layer: layer.into(), ..s.current_common() };
     s.doc_mut()?.add(space, common, kind).map_err(|e| bad("geo", e.to_string()))
 }
@@ -261,7 +275,7 @@ fn one_target(s: &Session, p: &Value, key: &str, cmd: &str) -> Result<Handle> {
 }
 
 /// The plan vertices of a line or polyline (arcs are taken as chords).
-fn path_of(s: &Session, h: Handle, space: &Space) -> Option<(Vec<Vec2>, bool)> {
+pub(super) fn path_of(s: &Session, h: Handle, space: &Space) -> Option<(Vec<Vec2>, bool)> {
     let d = s.doc().ok()?;
     let e = d.space(space)?.get(h)?;
     match &e.kind {
@@ -377,7 +391,7 @@ fn run_geokubatury(s: &mut Session, p: &Value) -> Result<Value> {
     }))
 }
 
-fn say(s: &mut Session, r: Result<Value>) {
+pub(super) fn say(s: &mut Session, r: Result<Value>) {
     match r {
         Ok(v) => {
             if let Some(m) = v.get("message").and_then(Value::as_str) {
@@ -390,7 +404,7 @@ fn say(s: &mut Session, r: Result<Value>) {
 }
 
 /// A number typed at a prompt (decimal comma accepted).
-fn typed_number(t: &str) -> Option<f64> {
+pub(super) fn typed_number(t: &str) -> Option<f64> {
     t.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite())
 }
 

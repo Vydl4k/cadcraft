@@ -167,6 +167,8 @@ pub enum Icon {
     GeoTerrain,
     GeoContours,
     GeoVolumes,
+    GeoDesign,
+    GeoVolumesBetween,
     GeoProfile,
     GeoWall,
     GeoOpening,
@@ -347,6 +349,32 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
                 pen.la(x, 14.0, x - 1.5, top + 1.5);
             }
             pen.l(4.0, 21.0, 20.0, 21.0);
+        }
+        GeoDesign => {
+            // Rough ground and the designed platform with its slopes over it.
+            pen.poly(&[(2.0, 17.0), (6.0, 14.0), (10.0, 17.0), (15.0, 13.0), (19.0, 16.0), (22.0, 14.0)], false, b);
+            pen.poly(&[(3.0, 16.0), (7.0, 9.0), (17.0, 9.0), (21.0, 15.0)], false, a);
+            for x in [4.0, 12.0, 20.0] {
+                pen.dot(x, 21.0);
+            }
+            pen.l(2.0, 21.0, 22.0, 21.0);
+        }
+        GeoVolumesBetween => {
+            // Existing ground and a straight design crossing it: cut on one side, fill on the
+            // other, the zero point between.
+            pen.poly(&[(2.0, 8.0), (7.0, 6.0), (12.0, 12.0), (17.0, 17.0), (22.0, 15.0)], false, b);
+            pen.la(2.0, 16.0, 22.0, 8.0);
+            for x in [4.0, 6.5, 9.0] {
+                let top = if x < 7.0 { 8.0 - (x - 2.0) * 0.4 } else { 6.0 + (x - 7.0) * 1.2 };
+                let bottom = 16.0 - (x - 2.0) * 0.4;
+                pen.l(x, top + 1.0, x, bottom - 1.0);
+            }
+            for x in [16.0, 18.5] {
+                let top = 16.0 - (x - 2.0) * 0.4;
+                let bottom = if x < 17.0 { 12.0 + (x - 12.0) } else { 17.0 - (x - 17.0) * 0.4 };
+                pen.la(x, top + 1.0, x, bottom - 1.0);
+            }
+            pen.p.circle_filled(pen.at(12.0, 12.0), pen.r.width() * 0.07, red);
         }
         GeoProfile => {
             pen.l(3.0, 20.0, 21.0, 20.0);

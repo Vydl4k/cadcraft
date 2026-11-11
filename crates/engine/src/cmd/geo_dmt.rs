@@ -23,6 +23,8 @@ use super::{CommandSpec, bad, bool_or, f64_or};
 use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, Step};
 
 pub const LAYER_TIN: &str = "GEO_DMT";
+/// The design surface (what the site should look like), compared with GEO_DMT by GEOROZDIL.
+pub const LAYER_DESIGN: &str = "GEO_DMT_navrh";
 pub const LAYER_MAIN: &str = "GEO_vrstevnice_hlavni";
 pub const LAYER_MINOR: &str = "GEO_vrstevnice_vedlejsi";
 pub const LAYER_LABELS: &str = "GEO_vrstevnice_popis";
@@ -39,7 +41,11 @@ pub(super) fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("geodmt", "Terrain Model (TIN)", run_geodmt)
             .menu(&["Geo", "Terrain Model"])
             .alias(&["geotin"])
-            .params("{handles?: points and break lines (default: the selection, else every POINT on GEO_body), maxEdge?: longest triangle side kept in metres (default 0 = all), replace?: bool, erase the old GEO_DMT (default true)} → {triangles, points, breaklines, message}"),
+            .params("{handles?: points and break lines (default: the selection, else every POINT on GEO_body), maxEdge?: longest triangle side kept in metres (default 0 = all), layer?: where the triangles go (default GEO_DMT), replace?: bool, erase the old triangles on that layer (default true)} → {triangles, points, breaklines, message}"),
+        CommandSpec::new("geonavrh", "Design Surface (TIN)", run_geonavrh)
+            .menu(&["Geo", "Design Surface"])
+            .alias(&["geodesign"])
+            .params("{handles?: points, 3D polylines and lines of the design (default: the selection), maxEdge?: (default 0 = all), replace?: bool (default true)} → {triangles, points, breaklines, message}; the triangles go on GEO_DMT_navrh"),
         CommandSpec::new("geovrstevnice", "Contours...", run_geovrstevnice)
             .menu(&["Geo", "Contours..."])
             .alias(&["geocontours", "geovrst"])
@@ -87,11 +93,38 @@ fn handles_or_selection(s: &Session, p: &Value) -> Result<Vec<Handle>> {
     super::targets(s, p)
 }
 
+/// GEONAVRH: GEODMT on the design layer, from the selected design objects only.
+fn run_geonavrh(s: &mut Session, p: &Value) -> Result<Value> {
+    if handles_or_selection(s, p)?.is_empty() {
+        return Err(bad("geonavrh", "select the design's points, 3D polylines and lines first"));
+    }
+    let mut q = p.clone();
+    if let Some(o) = q.as_object_mut() {
+        o.insert("layer".into(), json!(LAYER_DESIGN));
+    }
+    tin_on(s, &q, "geonavrh", LAYER_DESIGN, 3)
+}
+
 fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
-    const CMD: &str = "geodmt";
+    let layer = match p.get("layer") {
+        None | Some(Value::Null) => LAYER_TIN.to_string(),
+        Some(Value::String(l)) if valid_layer(l) => l.clone(),
+        Some(_) => return Err(bad("geodmt", "`layer` must be a layer name (1 to 64 letters, no <>/\\\":;?*|=,)")),
+    };
+    let aci = if layer.eq_ignore_ascii_case(LAYER_DESIGN) { 3 } else { 8 };
+    tin_on(s, p, "geodmt", &layer, aci)
+}
+
+/// A name usable as a layer: what DXF allows.
+fn valid_layer(l: &str) -> bool {
+    let n = l.chars().count();
+    (1..=64).contains(&n) && !l.chars().any(|c| "<>/\\\":;?*|=,`".contains(c) || c.is_control())
+}
+
+fn tin_on(s: &mut Session, p: &Value, cmd: &str, layer: &str, aci: u8) -> Result<Value> {
     let max_edge = f64_or(p, "maxEdge", 0.0);
     if !max_edge.is_finite() || max_edge < 0.0 {
-        return Err(bad(CMD, "`maxEdge` must be 0 or a positive length"));
+        return Err(bad(cmd, "`maxEdge` must be 0 or a positive length"));
     }
     let space = s.space();
     let chosen = handles_or_selection(s, p)?;
@@ -99,7 +132,7 @@ fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
     let mut breaks: Vec<Vec<Vec3>> = Vec::new();
     {
         let d = s.doc()?;
-        let st = d.space(&space).ok_or_else(|| bad(CMD, "no drawing space"))?;
+        let st = d.space(&space).ok_or_else(|| bad(cmd, "no drawing space"))?;
         let mut take = |e: &cadcraft_doc::Entity| match &e.kind {
             EntityKind::Point(q) => pts.push(q.p),
             EntityKind::Polyline3d(pl) if pl.points.len() >= 2 => {
@@ -132,10 +165,10 @@ fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
     }
     pts.retain(|q| q.x.is_finite() && q.y.is_finite() && q.z.is_finite());
     if pts.len() < 3 {
-        return Err(bad(CMD, "a terrain model needs at least 3 points with heights (select them, or import them with GEOBODY)"));
+        return Err(bad(cmd, "a terrain model needs at least 3 points with heights (select them, or import them with GEOBODY)"));
     }
     if pts.len() > MAX_POINTS {
-        return Err(bad(CMD, format!("at most {MAX_POINTS} points at once")));
+        return Err(bad(cmd, format!("at most {MAX_POINTS} points at once")));
     }
     // Triangulate about the points' centre: survey coordinates are ~10^6 m, and spade's exact
     // predicates are happier near the origin.
@@ -149,7 +182,7 @@ fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
             continue;
         }
         let v = V { p: Point2::new(q.x - c.x, q.y - c.y), z: q.z };
-        let h = cdt.insert(v).map_err(|e| bad(CMD, format!("a point could not be triangulated: {e:?}")))?;
+        let h = cdt.insert(v).map_err(|e| bad(cmd, format!("a point could not be triangulated: {e:?}")))?;
         index.insert(key(*q), h);
     }
     let mut constrained = 0;
@@ -164,10 +197,10 @@ fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let replace = bool_or(p, "replace", true);
     if replace {
-        clear_layer(s, &space, LAYER_TIN)?;
+        clear_layer(s, &space, layer)?;
     }
-    ensure_layer(s, LAYER_TIN, 8)?;
-    let common = Common { layer: LAYER_TIN.into(), ..s.current_common() };
+    ensure_layer(s, layer, aci)?;
+    let common = Common { layer: layer.into(), ..s.current_common() };
     let mut faces = Vec::new();
     for f in cdt.inner_faces() {
         let vs = f.vertices().map(|v| *v.data());
@@ -184,7 +217,7 @@ fn run_geodmt(s: &mut Session, p: &Value) -> Result<Value> {
     let d = s.doc_mut()?;
     let mut handles = Vec::with_capacity(faces.len());
     for f in faces {
-        handles.push(d.add(&space, common.clone(), EntityKind::Face3d(f)).map_err(|e| bad(CMD, e.to_string()))?);
+        handles.push(d.add(&space, common.clone(), EntityKind::Face3d(f)).map_err(|e| bad(cmd, e.to_string()))?);
     }
     Ok(json!({
         "triangles": handles.len(),
@@ -221,7 +254,7 @@ fn tri_segment(t: [Vec3; 3], l: f64) -> Option<(Vec2, Vec2)> {
 }
 
 /// Join segments into polylines by their shared ends.
-fn chain(segs: Vec<(Vec2, Vec2)>) -> Vec<(Vec<Vec2>, bool)> {
+pub(super) fn chain(segs: Vec<(Vec2, Vec2)>) -> Vec<(Vec<Vec2>, bool)> {
     let key = |p: Vec2| ((p.x * 1e5).round() as i64, (p.y * 1e5).round() as i64);
     let mut ends: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
     for (i, (a, b)) in segs.iter().enumerate() {

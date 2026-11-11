@@ -315,7 +315,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoVolumes, "geokubatury", "Cut and Fill Volumes"),
             (Icon::GeoProfile, "geoprofil", "Long Section"),
         ],
-        &[],
+        &[(Icon::GeoDesign, "geonavrh", "Design Surface"), (Icon::GeoVolumesBetween, "georozdil", "Volumes Between Two Terrains")],
     ),
     (
         "Building",
