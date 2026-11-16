@@ -751,7 +751,7 @@ fn run_geoprofil(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 /// The plan point at station `st` along `path`.
-fn along(path: &[Vec2], st: f64) -> Vec2 {
+pub(super) fn along(path: &[Vec2], st: f64) -> Vec2 {
     let mut left = st;
     for w in path.windows(2) {
         let (Some(&a), Some(&b)) = (w.first(), w.get(1)) else { continue };

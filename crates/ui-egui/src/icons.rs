@@ -197,6 +197,14 @@ pub enum Icon {
     GeoSlope,
     GeoMapSheets,
     GeoCadastre,
+    GeoIntersect,
+    GeoOrtho,
+    GeoCurve,
+    GeoTies,
+    GeoMerge,
+    GeoDrape,
+    GeoImportXml,
+    GeoHecRas,
     PdfImport,
 }
 
@@ -483,6 +491,7 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
         }
         GeoFallLine | GeoFlipEdge | GeoGridPoints | GeoStations | GeoStl | GeoSymbol | GeoCodes | GeoFence | GeoSlope | GeoMapSheets
         | GeoCadastre => paint_geo_more(pen, icon, b, a),
+        GeoIntersect | GeoOrtho | GeoCurve | GeoTies | GeoMerge | GeoDrape | GeoImportXml | GeoHecRas => paint_geo_calc(pen, icon, b, a),
         GeoKml => {
             // A globe with a pin.
             pen.c(12.0, 13.0, 8.0, b);
@@ -1584,6 +1593,82 @@ fn paint_geo_more(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
             pen.l(13.0, 13.0, 22.0, 11.0);
             pen.text(6.5, 12.0, "1", 6.0, a);
             pen.text(17.5, 7.5, "2", 6.0, a);
+        }
+        _ => {}
+    }
+}
+
+/// The second batch of calculation and terrain-exchange icons of the Geo tool set.
+fn paint_geo_calc(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
+    use Icon::*;
+    match icon {
+        GeoIntersect => {
+            // Two known points, two rays meeting at the new one.
+            pen.c(4.0, 19.0, 1.8, b);
+            pen.c(20.0, 19.0, 1.8, b);
+            pen.l(4.0, 19.0, 13.0, 6.0);
+            pen.l(20.0, 19.0, 13.0, 6.0);
+            pen.c(13.0, 6.0, 2.2, a);
+            pen.dot(13.0, 6.0);
+        }
+        GeoOrtho => {
+            // A measuring line with perpendicular offsets to points on either side.
+            pen.l(2.0, 14.0, 22.0, 14.0);
+            for (x, y) in [(6.0, 7.0), (12.0, 19.0), (18.0, 5.0)] {
+                pen.la(x, 14.0, x, y);
+                pen.dot(x, y);
+            }
+        }
+        GeoCurve => {
+            // Two tangents meeting at a vertex, the arc fitted between them.
+            pen.poly(&[(2.0, 20.0), (12.0, 4.0), (22.0, 20.0)], false, b);
+            pen.poly(&[(5.0, 15.2), (8.0, 11.8), (12.0, 10.4), (16.0, 11.8), (19.0, 15.2)], false, a);
+            pen.dot(5.0, 15.2);
+            pen.dot(19.0, 15.2);
+        }
+        GeoTies => {
+            // A point tied to three reference points.
+            for (x, y) in [(4.0, 5.0), (21.0, 8.0), (8.0, 21.0)] {
+                pen.la(12.0, 13.0, x, y);
+                pen.rect(x - 1.2, y - 1.2, 2.4, 2.4, b);
+            }
+            pen.c(12.0, 13.0, 2.2, b);
+            pen.dot(12.0, 13.0);
+        }
+        GeoMerge => {
+            // A terrain profile with a flat design platform let into it.
+            pen.poly(&[(2.0, 17.0), (6.0, 12.0), (9.0, 9.0)], false, b);
+            pen.poly(&[(15.0, 9.0), (19.0, 13.0), (22.0, 16.0)], false, b);
+            pen.poly(&[(9.0, 9.0), (15.0, 9.0)], false, a);
+            pen.la(9.0, 9.0, 9.0, 5.0);
+            pen.la(15.0, 9.0, 15.0, 5.0);
+            pen.l(2.0, 21.0, 22.0, 21.0);
+        }
+        GeoDrape => {
+            // A flat line above, the same line laid over the terrain below.
+            pen.l(3.0, 5.0, 21.0, 5.0);
+            pen.poly(&[(3.0, 18.0), (8.0, 13.0), (13.0, 16.0), (17.0, 11.0), (21.0, 14.0)], false, a);
+            for x in [8.0, 13.0, 17.0] {
+                pen.l(x, 6.5, x, 9.0);
+            }
+            pen.arrow_tip(13.0, 10.0, 0.0, 1.0, b);
+        }
+        GeoImportXml => {
+            // XML brackets with an arrow into a TIN corner.
+            pen.poly(&[(6.0, 3.0), (3.0, 6.0), (6.0, 9.0)], false, b);
+            pen.poly(&[(10.0, 3.0), (13.0, 6.0), (10.0, 9.0)], false, b);
+            pen.la(18.0, 3.0, 18.0, 10.0);
+            pen.arrow_tip(18.0, 11.0, 0.0, 1.0, a);
+            pen.poly(&[(5.0, 20.0), (13.0, 21.0), (10.0, 13.0)], true, b);
+            pen.l(13.0, 21.0, 20.0, 15.0);
+            pen.l(10.0, 13.0, 20.0, 15.0);
+        }
+        GeoHecRas => {
+            // A river axis with cross sections over it.
+            pen.poly(&[(3.0, 4.0), (9.0, 9.0), (13.0, 14.0), (20.0, 20.0)], false, a);
+            for (x, y) in [(6.0, 6.5), (11.0, 11.5), (16.5, 17.0)] {
+                pen.l(x - 3.5, y + 3.0, x + 3.5, y - 3.0);
+            }
         }
         _ => {}
     }

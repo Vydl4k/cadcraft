@@ -49,15 +49,19 @@ pub(super) fn specs() -> Vec<CommandSpec> {
 
 /// Geodetic Y, X of a drawing point, and back.
 #[derive(Clone, Copy)]
-struct Frame {
+pub(super) struct Frame {
     sjtsk: bool,
 }
 
 impl Frame {
-    fn of(pts: &[Vec2]) -> Frame {
+    pub(super) fn of(pts: &[Vec2]) -> Frame {
         Frame { sjtsk: !pts.is_empty() && pts.iter().all(|q| q.x < -300_000.0 && q.y < -900_000.0) }
     }
-    fn to_yx(self, p: Vec2) -> (f64, f64) {
+    /// Whether the drawing is in S-JTSK (x = −Y, y = −X).
+    pub(super) fn sjtsk(self) -> bool {
+        self.sjtsk
+    }
+    pub(super) fn to_yx(self, p: Vec2) -> (f64, f64) {
         if self.sjtsk { (-p.x, -p.y) } else { (p.x, p.y) }
     }
 }
@@ -68,7 +72,7 @@ pub fn bearing(a: (f64, f64), b: (f64, f64)) -> f64 {
     if t < 0.0 { t + std::f64::consts::TAU } else { t }
 }
 
-fn unit(p: &Value) -> Result<f64> {
+pub(super) fn unit(p: &Value) -> Result<f64> {
     match str_param(p, "units").unwrap_or("gon") {
         u if u.eq_ignore_ascii_case("gon") || u.eq_ignore_ascii_case("g") => Ok(std::f64::consts::PI / 200.0),
         u if u.eq_ignore_ascii_case("deg") || u.eq_ignore_ascii_case("°") => Ok(std::f64::consts::PI / 180.0),
@@ -77,7 +81,7 @@ fn unit(p: &Value) -> Result<f64> {
 }
 
 /// A point given by its number or as coordinates, in the drawing.
-fn point_ref(s: &Session, space: &Space, v: Option<&Value>, key: &str, cmd: &str) -> Result<Vec3> {
+pub(super) fn point_ref(s: &Session, space: &Space, v: Option<&Value>, key: &str, cmd: &str) -> Result<Vec3> {
     let v = v.ok_or_else(|| bad(cmd, format!("`{key}` (a point number or [x, y]) is required")))?;
     if let Some(a) = v.as_array() {
         let n: Vec<f64> = a.iter().filter_map(Value::as_f64).filter(|x| x.is_finite() && x.abs() < 1e9).collect();
@@ -99,7 +103,7 @@ fn point_ref(s: &Session, space: &Space, v: Option<&Value>, key: &str, cmd: &str
         .ok_or_else(|| bad(cmd, format!("no point {num} in the drawing (GEO_body)")))
 }
 
-fn number(t: &str) -> Option<f64> {
+pub(super) fn number(t: &str) -> Option<f64> {
     t.trim().replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite())
 }
 

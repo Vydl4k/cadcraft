@@ -328,6 +328,8 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoFlipEdge, "geohrana", "Flip Terrain Edge"),
             (Icon::GeoGridPoints, "geomrizka", "Grid of Terrain Points"),
             (Icon::GeoStations, "geostaniceni", "Stationing"),
+            (Icon::GeoMerge, "geosloucit", "Merge Terrain Models"),
+            (Icon::GeoDrape, "geopoloz", "Drape on Terrain"),
         ],
     ),
     (
@@ -341,6 +343,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoFence, "geolinie", "Line Symbol"),
             (Icon::GeoSlope, "geosvah", "Slope Hachures"),
             (Icon::GeoMapSheets, "geomlisty", "Map Sheets"),
+            (Icon::GeoTies, "geomistopis", "Tie Sketch"),
         ],
     ),
     (
@@ -350,7 +353,12 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoStakeout, "geovytyc", "Setting Out"),
             (Icon::GeoHelmert, "geohelmert", "Helmert Transformation"),
         ],
-        &[(Icon::GeoRenumber, "geocisla", "Find or Renumber Points")],
+        &[
+            (Icon::GeoRenumber, "geocisla", "Find or Renumber Points"),
+            (Icon::GeoIntersect, "geoprotinani", "Intersection"),
+            (Icon::GeoOrtho, "geoorto", "Orthogonal Method"),
+            (Icon::GeoCurve, "geooblouk", "Curve Setting Out"),
+        ],
     ),
     (
         "Building",
@@ -365,7 +373,13 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
     (
         "Sheet and Exchange",
         &[(Icon::GeoSheet, "georam", "Sheet Frame and Title Block"), (Icon::PdfImport, "pdfimport", "PDF Import")],
-        &[(Icon::GeoLandXml, "geolandxml", "Export LandXML"), (Icon::GeoKml, "geokml", "Export KML"), (Icon::GeoStl, "geostl", "Export STL")],
+        &[
+            (Icon::GeoLandXml, "geolandxml", "Export LandXML"),
+            (Icon::GeoKml, "geokml", "Export KML"),
+            (Icon::GeoStl, "geostl", "Export STL"),
+            (Icon::GeoImportXml, "geoimportxml", "Import LandXML"),
+            (Icon::GeoHecRas, "geohecras", "Export for HEC-RAS"),
+        ],
     ),
 ];
 

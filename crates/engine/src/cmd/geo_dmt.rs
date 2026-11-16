@@ -79,7 +79,7 @@ fn ensure_layer(s: &mut Session, name: &str, aci: u8) -> Result<()> {
 }
 
 /// Erase every object on `layer` in `space`.
-fn clear_layer(s: &mut Session, space: &Space, layer: &str) -> Result<usize> {
+pub(super) fn clear_layer(s: &mut Session, space: &Space, layer: &str) -> Result<usize> {
     let d = s.doc_mut()?;
     let doomed: Vec<Handle> =
         d.space(space).map(|st| st.iter().filter(|e| e.common.layer.eq_ignore_ascii_case(layer)).map(|e| e.handle).collect()).unwrap_or_default();
