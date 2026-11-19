@@ -193,6 +193,7 @@ fn filters(pick: &Pick) -> Vec<(&'static str, Vec<&'static str>)> {
             ("PDF", vec!["pdf"]),
             (i18n::t("Coordinate lists (TXT, CSV)"), vec!["txt", "csv", "xyz", "ss"]),
             (i18n::t("Cadastre (VFK)"), vec!["vfk"]),
+            (i18n::t("Cadastral maps (VKM, VGI)"), vec!["vkm", "vgi"]),
             ("LandXML", vec!["xml"]),
             (i18n::t("All files"), vec!["*"]),
         ],

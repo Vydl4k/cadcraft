@@ -205,6 +205,11 @@ pub enum Icon {
     GeoDrape,
     GeoImportXml,
     GeoHecRas,
+    GeoTinAdd,
+    GeoTinRemove,
+    GeoTinDelete,
+    GeoTinHeight,
+    GeoCadastreOld,
     PdfImport,
 }
 
@@ -491,7 +496,8 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
         }
         GeoFallLine | GeoFlipEdge | GeoGridPoints | GeoStations | GeoStl | GeoSymbol | GeoCodes | GeoFence | GeoSlope | GeoMapSheets
         | GeoCadastre => paint_geo_more(pen, icon, b, a),
-        GeoIntersect | GeoOrtho | GeoCurve | GeoTies | GeoMerge | GeoDrape | GeoImportXml | GeoHecRas => paint_geo_calc(pen, icon, b, a),
+        GeoIntersect | GeoOrtho | GeoCurve | GeoTies | GeoMerge | GeoDrape | GeoImportXml | GeoHecRas | GeoTinAdd | GeoTinRemove | GeoTinDelete
+        | GeoTinHeight | GeoCadastreOld => paint_geo_calc(pen, icon, b, a),
         GeoKml => {
             // A globe with a pin.
             pen.c(12.0, 13.0, 8.0, b);
@@ -1662,6 +1668,39 @@ fn paint_geo_calc(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
             pen.poly(&[(5.0, 20.0), (13.0, 21.0), (10.0, 13.0)], true, b);
             pen.l(13.0, 21.0, 20.0, 15.0);
             pen.l(10.0, 13.0, 20.0, 15.0);
+        }
+        GeoTinAdd | GeoTinRemove | GeoTinDelete | GeoTinHeight => {
+            // A pair of triangles, and what the edit does to them.
+            pen.poly(&[(3.0, 20.0), (12.0, 4.0), (21.0, 20.0)], true, b);
+            pen.l(12.0, 4.0, 12.0, 20.0);
+            match icon {
+                GeoTinAdd => {
+                    pen.dot(14.5, 15.0);
+                    pen.la(17.0, 3.0, 17.0, 9.0);
+                    pen.la(14.0, 6.0, 20.0, 6.0);
+                }
+                GeoTinRemove => {
+                    pen.c(12.0, 4.0, 2.2, a);
+                    pen.la(15.0, 2.0, 21.0, 8.0);
+                    pen.la(21.0, 2.0, 15.0, 8.0);
+                }
+                GeoTinDelete => {
+                    pen.la(14.0, 17.0, 18.0, 13.0);
+                    pen.la(14.0, 13.0, 18.0, 17.0);
+                }
+                _ => {
+                    pen.dot(12.0, 4.0);
+                    pen.la(18.0, 10.0, 18.0, 3.0);
+                    pen.arrow_tip(18.0, 2.5, 0.0, -1.0, a);
+                }
+            }
+        }
+        GeoCadastreOld => {
+            // Parcels with an arc boundary and a parcel number.
+            pen.poly(&[(2.0, 20.0), (2.0, 4.0), (22.0, 4.0), (22.0, 20.0)], false, b);
+            pen.arc(12.0, 20.0, 10.0, 180.0, 0.0, a);
+            pen.l(12.0, 4.0, 12.0, 10.0);
+            pen.text(6.5, 9.0, "1", 6.0, a);
         }
         GeoHecRas => {
             // A river axis with cross sections over it.

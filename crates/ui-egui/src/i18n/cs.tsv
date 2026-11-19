@@ -1427,3 +1427,27 @@ menu	Export for HEC-RAS	Export pro HEC-RAS
 menu	Export for HEC-RAS...	Export pro HEC-RAS...
 	HEC-RAS...	HEC-RAS...
 menu	HEC-RAS...	HEC-RAS...
+	Insert Point into Terrain Model	Vložit bod do modelu terénu
+menu	Insert Point into Terrain Model	Vložit bod do modelu terénu
+	Remove Point from Terrain Model	Odebrat bod z modelu terénu
+menu	Remove Point from Terrain Model	Odebrat bod z modelu terénu
+	Delete Terrain Triangle	Smazat trojúhelník terénu
+menu	Delete Terrain Triangle	Smazat trojúhelník terénu
+	Change Terrain Vertex Height	Změnit výšku bodu modelu
+menu	Change Terrain Vertex Height	Změnit výšku bodu modelu
+	Edit Terrain Model	Úpravy modelu terénu
+menu	Edit Terrain Model	Úpravy modelu terénu
+	Insert Point	Vložit bod
+menu	Insert Point	Vložit bod
+	Remove Point	Odebrat bod
+menu	Remove Point	Odebrat bod
+	Delete Triangle	Smazat trojúhelník
+menu	Delete Triangle	Smazat trojúhelník
+	Change Vertex Height	Změnit výšku bodu
+menu	Change Vertex Height	Změnit výšku bodu
+	Import Cadastral Map (VKM, VGI)	Katastrální mapa (VKM, VGI)
+menu	Import Cadastral Map (VKM, VGI)	Katastrální mapa (VKM, VGI)
+	Import Cadastral Map (VKM, VGI)...	Katastrální mapa (VKM, VGI)...
+menu	Import Cadastral Map (VKM, VGI)...	Katastrální mapa (VKM, VGI)...
+	Cadastral maps (VKM, VGI)	Katastrální mapy (VKM, VGI)
+menu	Cadastral maps (VKM, VGI)	Katastrální mapy (VKM, VGI)

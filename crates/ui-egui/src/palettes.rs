@@ -330,6 +330,10 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoStations, "geostaniceni", "Stationing"),
             (Icon::GeoMerge, "geosloucit", "Merge Terrain Models"),
             (Icon::GeoDrape, "geopoloz", "Drape on Terrain"),
+            (Icon::GeoTinAdd, "geodmtbod", "Insert Point into Terrain Model"),
+            (Icon::GeoTinRemove, "geodmtodebrat", "Remove Point from Terrain Model"),
+            (Icon::GeoTinDelete, "geodmtsmazat", "Delete Terrain Triangle"),
+            (Icon::GeoTinHeight, "geodmtvyska", "Change Terrain Vertex Height"),
         ],
     ),
     (
@@ -338,6 +342,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoCodes, "geokresba", "Draw from Point Codes"),
             (Icon::GeoSymbol, "geoznacka", "Map Symbol"),
             (Icon::GeoCadastre, "geovfk", "Import Cadastral Map (VFK)"),
+            (Icon::GeoCadastreOld, "geovkm", "Import Cadastral Map (VKM, VGI)"),
         ],
         &[
             (Icon::GeoFence, "geolinie", "Line Symbol"),

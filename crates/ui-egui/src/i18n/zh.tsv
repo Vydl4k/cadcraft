@@ -1669,3 +1669,27 @@ menu	Export for HEC-RAS	导出到 HEC-RAS
 menu	Export for HEC-RAS...	导出到 HEC-RAS...
 	HEC-RAS...	HEC-RAS...
 menu	HEC-RAS...	HEC-RAS...
+	Insert Point into Terrain Model	向地形模型插入点
+menu	Insert Point into Terrain Model	向地形模型插入点
+	Remove Point from Terrain Model	从地形模型删除点
+menu	Remove Point from Terrain Model	从地形模型删除点
+	Delete Terrain Triangle	删除地形三角形
+menu	Delete Terrain Triangle	删除地形三角形
+	Change Terrain Vertex Height	修改地形顶点高程
+menu	Change Terrain Vertex Height	修改地形顶点高程
+	Edit Terrain Model	编辑地形模型
+menu	Edit Terrain Model	编辑地形模型
+	Insert Point	插入点
+menu	Insert Point	插入点
+	Remove Point	删除点
+menu	Remove Point	删除点
+	Delete Triangle	删除三角形
+menu	Delete Triangle	删除三角形
+	Change Vertex Height	修改顶点高程
+menu	Change Vertex Height	修改顶点高程
+	Import Cadastral Map (VKM, VGI)	导入地籍图 (VKM, VGI)
+menu	Import Cadastral Map (VKM, VGI)	导入地籍图 (VKM, VGI)
+	Import Cadastral Map (VKM, VGI)...	导入地籍图 (VKM, VGI)...
+menu	Import Cadastral Map (VKM, VGI)...	导入地籍图 (VKM, VGI)...
+	Cadastral maps (VKM, VGI)	地籍图 (VKM, VGI)
+menu	Cadastral maps (VKM, VGI)	地籍图 (VKM, VGI)
