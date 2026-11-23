@@ -273,6 +273,7 @@ fn run_geobody(s: &mut Session, p: &Value) -> Result<Value> {
 #[derive(Default)]
 struct BodyM {
     path: Option<String>,
+    columns: Option<String>,
 }
 
 impl Interactive for BodyM {
@@ -281,9 +282,11 @@ impl Interactive for BodyM {
     }
 
     fn prompt(&self, _s: &Session) -> Prompt {
-        match self.path {
-            None => Prompt::new("Enter name of coordinate list to import", Accept::TEXT),
-            Some(_) => Prompt::new("Columns (P number, Y, X, Z, K code, - skip)", Accept::TEXT).default("PYXZK"),
+        match (&self.path, &self.columns) {
+            (None, _) => Prompt::new("Enter name of coordinate list to import", Accept::TEXT),
+            (Some(_), None) => Prompt::new("Columns (P number, Y, X, Z, K code, - skip)", Accept::TEXT).default("PYXZK"),
+            // Labels are 2 mm on paper at this scale.
+            _ => Prompt::new("Drawing scale 1: (sets the label size)", Accept::NUMBER).default("500"),
         }
     }
 
@@ -300,12 +303,28 @@ impl Interactive for BodyM {
             }
             return Ok(Step::Continue);
         };
-        let spec = if t.is_empty() { "PYXZK".to_string() } else { t };
-        if let Err(e) = columns(&spec) {
-            s.echo(e);
+        let Some(spec) = self.columns.clone() else {
+            let spec = if t.is_empty() { "PYXZK".to_string() } else { t };
+            match columns(&spec) {
+                Ok(_) => self.columns = Some(spec),
+                Err(e) => s.echo(e),
+            }
             return Ok(Step::Continue);
-        }
-        match run_geobody(s, &json!({ "path": path, "columns": spec })) {
+        };
+        let scale = if t.is_empty() {
+            500.0
+        } else {
+            // "1:200", "1 : 200" and "200" all mean 1:200.
+            let n = t.rsplit(':').next().unwrap_or(&t).trim().replace(',', ".");
+            match n.parse::<f64>().ok().filter(|v| v.is_finite() && (1.0..=1_000_000.0).contains(v)) {
+                Some(v) => v,
+                None => {
+                    s.echo("Enter the drawing scale, like 200, 500 or 1000.");
+                    return Ok(Step::Continue);
+                }
+            }
+        };
+        match run_geobody(s, &json!({ "path": path, "columns": spec, "scale": scale })) {
             Ok(r) => {
                 if let Some(m) = r.get("message").and_then(Value::as_str) {
                     s.echo(m.to_string());
@@ -325,6 +344,38 @@ impl Interactive for BodyM {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_icon_asks_for_the_scale() {
+        let dir = std::env::temp_dir().join(format!("geobody-scale-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("body.txt");
+        std::fs::write(&path, "1 10 20 300\n2 30 40 301\n").unwrap();
+        let label_height = |s: &Session| {
+            s.doc().unwrap().model.iter().find_map(|e| match &e.kind {
+                EntityKind::Text(t) if e.common.layer == LAYER_NUMBERS => Some(t.height),
+                _ => None,
+            })
+        };
+        // File, Enter for the columns, then 1:200: labels 0.4 m.
+        let mut s = Session::new();
+        s.start("geobody").unwrap();
+        s.input(Input::Text(path.to_string_lossy().into_owned())).unwrap();
+        s.input(Input::Enter).unwrap();
+        assert!(s.doc().unwrap().model.iter().next().is_none(), "nothing before the scale is given");
+        s.input(Input::Text("1:200".into())).unwrap();
+        assert!((label_height(&s).unwrap() - 0.4).abs() < 1e-12);
+        // Enter keeps 1:500 (1 m); a wrong answer asks again.
+        let mut s = Session::new();
+        s.start("geobody").unwrap();
+        s.input(Input::Text(path.to_string_lossy().into_owned())).unwrap();
+        s.input(Input::Text("PYXZ".into())).unwrap();
+        s.input(Input::Text("abc".into())).unwrap();
+        assert!(label_height(&s).is_none());
+        s.input(Input::Enter).unwrap();
+        assert!((label_height(&s).unwrap() - 1.0).abs() < 1e-12);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn lists_in_the_usual_shapes() {

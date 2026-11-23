@@ -1451,3 +1451,6 @@ menu	Import Cadastral Map (VKM, VGI)	Katastrální mapa (VKM, VGI)
 menu	Import Cadastral Map (VKM, VGI)...	Katastrální mapa (VKM, VGI)...
 	Cadastral maps (VKM, VGI)	Katastrální mapy (VKM, VGI)
 menu	Cadastral maps (VKM, VGI)	Katastrální mapy (VKM, VGI)
+	Enter name of coordinate list to import	Zadejte soubor se seznamem souřadnic
+	Columns (P number, Y, X, Z, K code, - skip)	Sloupce (P číslo, Y, X, Z, K kód, - přeskočit)
+	Drawing scale 1: (sets the label size)	Měřítko výkresu 1: (určí velikost popisů)
