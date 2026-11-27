@@ -97,7 +97,7 @@ fn solid(loops: Vec<Vec<Vec2>>) -> EntityKind {
         solid: true,
         loops: loops
             .into_iter()
-            .map(|l| HatchLoop { vertices: l.into_iter().map(PolyVertex::new).collect(), outer: true, sources: Vec::new() })
+            .map(|l| HatchLoop { vertices: l.into_iter().map(PolyVertex::new).collect(), outer: true, sources: Vec::new(), boundary_flags: None })
             .collect(),
         scale: 1.0,
         angle: 0.0,

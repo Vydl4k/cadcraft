@@ -114,7 +114,7 @@ pub(super) fn decode(bytes: &[u8]) -> String {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
     match std::str::from_utf8(bytes) {
         Ok(s) => s.to_string(),
-        Err(_) => cadcraft_dxf::decode_code_page(bytes, "ANSI_1250").unwrap_or_else(|| String::from_utf8_lossy(bytes).into_owned()),
+        Err(_) => craft_dxf::decode_code_page(bytes, "ANSI_1250").unwrap_or_else(|| String::from_utf8_lossy(bytes).into_owned()),
     }
 }
 
@@ -185,6 +185,7 @@ fn read_path(path: &str) -> Result<Vec<u8>> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let p = std::path::Path::new(path);
+        crate::file_access::check_read(p).map_err(|e| bad(CMD, e))?;
         let len = std::fs::metadata(p).map_err(|e| bad(CMD, format!("{path}: {e}")))?.len();
         if len > MAX_BYTES {
             return Err(bad(CMD, format!("{path} is larger than {} MB", MAX_BYTES >> 20)));

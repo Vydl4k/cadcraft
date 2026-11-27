@@ -1,690 +1,1064 @@
-//! PDF → Drawing: the vector content of one PDF page as editable objects (PDFIMPORT).
+//! PDF → Drawing (PDFIMPORT): the vector content of one page as editable objects.
 //!
-//! The page is run through craft-pdf's guarded interpreter with a device that keeps what a
-//! drawing can use: stroked paths become lines, polylines and (for larger curves) splines on
-//! layers named after their colour (`PDF_RRGGBB`); filled areas become closed outlines on
-//! `PDF_Fill_RRGGBB` (white fills, which only cover paper, are left out unless asked for);
-//! dashed strokes get a `PDF_Dash<n>` linetype of the dash pattern at the import scale; text
-//! whose characters the PDF names (through its fonts or a `ToUnicode` map) becomes TEXT on
-//! `PDF_Text`, and text whose characters it doesn't name is drawn as glyph outlines instead.
+//! Stroked paths become `LINE`s and `LWPOLYLINE`s (a curve that is a circular arc becomes a bulge
+//! vertex, any other curve is flattened into short segments), filled paths become solid `HATCH`es
+//! and text becomes `TEXT`: the glyphs of one baseline are joined into a single string and fitted
+//! to the width the PDF gave them. Each kind goes to its own layer (`PDF_Geometry`,
+//! `PDF_Solid Fills`, `PDF_Text`) with the colour and line width the PDF used, in millimetres with
+//! the page's lower-left corner at the origin.
 //!
-//! Coordinates are the page's in points (1/72 in, `/UserUnit` applied, `/Rotate` and the crop box
-//! honoured) with the lower-left corner at the origin and Y up, times
-//! [`PdfImport::units_per_point`]: 25.4/72 gives the sheet in millimetres; 25.4/72 × 50 / 1000 a
-//! 1:50 sheet in metres.
+//! Any PDF is read; a drawing plotted from a CAD program imports best, since that is what the
+//! mapping above is made for.
 //!
-//! Left out (named in the drawing's read note): raster images, shadings, and glyphs of Type 3
-//! fonts. Clipping is not applied: everything the page draws is imported whole.
+//! Not imported (each is named in a read note, so it is never left out silently): raster images,
+//! Type 3 glyphs and glyphs without a Unicode value, gradient and pattern fills, and white or
+//! near-white fills (they only hide what lies under them on paper). A rectangular clip (the usual
+//! page, viewport and frame clip) cuts the lines and filled shapes it crosses and drops what lies
+//! outside it, and text whose glyphs' middles lie outside it; other clip shapes, transparency and
+//! dash patterns are not applied, and a read note says how often.
+//!
+//! Adapted from CADCraft PR #2787, commit ec17f63f189d1dccf91357701f9bba243ca88dd5
+//! (MIT OR Apache-2.0). PDF interpretation stays in craft-pdf; this module maps it to CAD entities.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU8, Ordering},
+};
 
 use cadcraft_color::{Color, Rgb};
-use cadcraft_doc::{Common, DashElement, Drawing, EntityKind, HAlign, Layer, Line, Linetype, LwPolyline, Space, Text, VAlign};
-use cadcraft_geom::{PolyVertex, Spline, Vec2, Vec3};
-use craft_pdf::interpret::font::Glyph;
+use cadcraft_doc::{Common, Drawing, EntityKind, HAlign, Hatch, HatchLoop, Line, Lineweight, LwPolyline, Space, Text};
+use cadcraft_geom::{PolyVertex, Polyline, Vec2, Vec3};
+use craft_pdf::interpret::hayro_cmap::BfString;
 use craft_pdf::interpret::{
-    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache, InterpreterSettings, Paint, PathDrawMode, SoftMask, TransformExt,
+    BlendMode, ClipPath, Context, Device, FillRule, GlyphDrawMode, Image, InterpreterCache, InterpreterSettings, InterpreterWarning, Paint,
+    PathDrawMode, RectExt, SoftMask, TransformExt, font::Glyph,
 };
-use kurbo::{Affine, BezPath, PathEl, Point, Shape};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect};
 
 use crate::{IoError, Result};
 
-/// Largest PDF accepted.
-const MAX_INPUT: usize = 256 << 20;
-/// Objects created from one page.
-const MAX_OBJECTS: usize = 2_000_000;
-/// Vertices kept across the whole page (flattened curves and glyph outlines included).
-const MAX_VERTS: usize = 8_000_000;
-/// Colour layers and dash linetypes created.
-const MAX_LAYERS: usize = 512;
-const MAX_LINETYPES: usize = 256;
-/// Characters in one TEXT.
-const MAX_TEXT_CHARS: usize = 2_000;
-/// A curve whose control polygon is longer than this many points becomes a spline; shorter
-/// ones are flattened into the polyline they belong to.
-const SPLINE_MIN_PT: f64 = 6.0;
+mod fill;
 
-/// How a PDF page is imported.
-#[derive(Clone, Debug, PartialEq)]
-pub struct PdfImport {
-    /// The page, from 1.
+/// Objects one import creates.
+const MAX_ENTITIES: usize = 1_000_000;
+/// Vertices kept across the whole import, so a page of curves cannot grow without bound.
+const MAX_TOTAL_VERTS: usize = 8_000_000;
+/// Vertices in one polyline.
+const MAX_POLY_VERTS: usize = 100_001;
+/// Glyphs read from one page.
+const MAX_GLYPHS: usize = 2_000_000;
+/// Characters one glyph may stand for (a ToUnicode entry may map a code to a string of any length).
+const MAX_GLYPH_CHARS: usize = 32;
+/// Characters of text read from one page.
+const MAX_TEXT_CHARS: usize = 4_000_000;
+/// A page is refused when its sides, in points, are not between these.
+const MAX_PAGE_PT: f64 = 200_000.0;
+/// Bound the input before the parser copies it and the page tree before interpretation.
+const MAX_INPUT_BYTES: usize = 64 << 20;
+const MAX_PAGES: usize = 1000;
+/// Millimetres in a PDF point (1/72 inch).
+pub const MM_PER_PT: f64 = 25.4 / 72.0;
+/// How far a flattened curve may leave the real one, in points.
+const FLATTEN_TOL_PT: f64 = 0.02;
+/// Cap height of a typical text face, as a fraction of its em square.
+const CAP_HEIGHT: f64 = 0.72;
+/// A path with a point further than this from the origin, in drawing units, is left out: no real
+/// page reaches it, and the numbers past it overflow into infinity.
+const MAX_COORD: f64 = 1.0e9;
+/// A curve is flattened to no finer than its size over this, so one huge curve cannot grow into
+/// millions of segments (about 500 at most).
+const CURVE_RESOLUTION: f64 = 250_000.0;
+
+const LAYER_GEOMETRY: &str = "PDF_Geometry";
+const LAYER_FILLS: &str = "PDF_Solid Fills";
+const LAYER_TEXT: &str = "PDF_Text";
+
+/// What PDFIMPORT reads and how it places it.
+#[derive(Clone, Debug)]
+pub struct PdfImportOptions {
+    /// The page to import, counted from 1.
     pub page: usize,
-    /// Drawing units per PDF point (1/72 in on the sheet).
-    pub units_per_point: f64,
-    /// Import filled areas as closed outlines.
-    pub fills: bool,
-    /// Import white fills too (they only cover the paper).
-    pub white_fills: bool,
-    /// Import text as TEXT where the PDF names its characters (else as glyph outlines).
+    /// The password of an encrypted file.
+    pub password: Option<String>,
+    /// Drawing units per PDF point (millimetres by default).
+    pub unit: f64,
+    /// Import text as `TEXT` (else it is left out).
     pub text: bool,
+    /// Import filled shapes as solid hatches.
+    pub fills: bool,
+    /// Give strokes the line width the PDF drew them with.
+    pub lineweights: bool,
 }
 
-impl Default for PdfImport {
+impl Default for PdfImportOptions {
     fn default() -> Self {
-        PdfImport { page: 1, units_per_point: 25.4 / 72.0, fills: true, white_fills: false, text: true }
+        PdfImportOptions { page: 1, password: None, unit: MM_PER_PT, text: true, fills: true, lineweights: true }
     }
 }
 
-fn err(msg: impl Into<String>) -> IoError {
-    IoError::Format(format!("PDF: {}", msg.into()))
+/// Read one page of a PDF. Returns the drawing and the number of pages in the file.
+pub fn read(bytes: &[u8], o: &PdfImportOptions) -> Result<(Drawing, usize)> {
+    read_within(bytes, o, MAX_TOTAL_VERTS)
 }
 
-fn open(bytes: &[u8]) -> Result<craft_pdf::syntax::Pdf> {
-    if bytes.len() > MAX_INPUT {
-        return Err(err(format!("the file is larger than {} MB", MAX_INPUT >> 20)));
+/// [`read`] with the page's vertex budget given (the tests use a small one).
+fn read_within(bytes: &[u8], o: &PdfImportOptions, verts: usize) -> Result<(Drawing, usize)> {
+    if !o.unit.is_finite() || o.unit <= 0.0 {
+        return Err(IoError::Format("PDF: the unit must be a positive number".into()));
     }
-    craft_pdf::open_slice(bytes, None).map_err(|e| match e {
-        craft_pdf::OpenError::Load(craft_pdf::syntax::LoadPdfError::Decryption(_)) => err("the file is password-protected"),
-        other => err(other.to_string()),
-    })
-}
-
-/// How many pages the PDF has.
-pub fn page_count(bytes: &[u8]) -> Result<usize> {
-    Ok(open(bytes)?.pages().len())
-}
-
-/// Read one page as a drawing (model space, the page's lower-left corner at the origin).
-pub fn import(bytes: &[u8], opts: &PdfImport) -> Result<Drawing> {
-    let k = opts.units_per_point;
-    if !k.is_finite() || k <= 0.0 || k > 1.0e6 {
-        return Err(err("the scale must be a positive number"));
-    }
-    let pdf = open(bytes)?;
+    let options = craft_pdf::OpenOptions { max_input_bytes: MAX_INPUT_BYTES, ..Default::default() };
+    let pdf = craft_pdf::open_slice_with_options(bytes, o.password.as_deref(), &options).map_err(|e| IoError::Format(format!("PDF: {e}")))?;
     let pages = pdf.pages();
-    let n = pages.len();
-    let page = opts.page.checked_sub(1).and_then(|i| pages.get(i)).ok_or_else(|| {
-        err(if n == 1 {
-            format!("page {} doesn't exist: the file has 1 page", opts.page)
-        } else {
-            format!("page {} doesn't exist: the file has {n} pages", opts.page)
-        })
+    let count = pages.len();
+    if count > MAX_PAGES {
+        return Err(IoError::Format(format!("PDF: more than {MAX_PAGES} pages")));
+    }
+    let page = o.page.checked_sub(1).and_then(|i| pages.get(i)).ok_or_else(|| {
+        IoError::Format(format!("PDF: page {} doesn't exist; the file has {count} page{}", o.page, if count == 1 { "" } else { "s" }))
     })?;
     let (w, h) = page.render_dimensions();
-    let initial = page.initial_transform(false).to_kurbo();
+    let (w, h) = (f64::from(w), f64::from(h));
+    if !(w.is_finite() && h.is_finite() && (1.0..=MAX_PAGE_PT).contains(&w) && (1.0..=MAX_PAGE_PT).contains(&h)) {
+        return Err(IoError::Format(format!("PDF: page size {w} × {h} points is not usable")));
+    }
     let cache = InterpreterCache::new();
-    let mut ctx = Context::new(initial, kurbo::Rect::new(0.0, 0.0, f64::from(w), f64::from(h)), &cache, pdf.xref(), InterpreterSettings::default());
-    let mut dev = Collector::new(opts.clone());
-    craft_pdf::interpret_page(page, &mut ctx, &mut dev).map_err(|e| err(e.to_string()))?;
+    let warnings = Arc::new(AtomicU8::new(0));
+    let sink = warnings.clone();
+    let settings = InterpreterSettings {
+        warning_sink: Arc::new(move |warning| {
+            let flag = match warning {
+                InterpreterWarning::UnsupportedFont => 1,
+                InterpreterWarning::ImageDecodeFailure => 2,
+                InterpreterWarning::ContentTruncated => 4,
+            };
+            sink.fetch_or(flag, Ordering::Relaxed);
+        }),
+        ..Default::default()
+    };
+    let mut context = Context::new(page.initial_transform(false).to_kurbo(), page.intersected_crop_box().to_kurbo(), &cache, page.xref(), settings);
+    let mut dev = Collector::new(o);
+    // The page boundary clips content even if its stream has no explicit clipping operator.
+    dev.clips.push(Some(Rect::new(0.0, 0.0, w, h)));
+    dev.verts_left = verts;
+    craft_pdf::interpret_page(page, &mut context, &mut dev).map_err(|e| IoError::Format(format!("PDF: {e}")))?;
     dev.flush_text();
-    if let Some(e) = dev.error.take() {
-        return Err(e);
+    if let Some(e) = dev.failure.take() {
+        return Err(IoError::Format(e));
     }
-    let mut d = dev.drawing;
-    let mut left = Vec::new();
-    if dev.images > 0 {
-        left.push(if dev.images == 1 { "1 raster image".to_string() } else { format!("{} raster images", dev.images) });
+    let warnings = warnings.load(Ordering::Relaxed);
+    if warnings & 4 != 0 {
+        return Err(IoError::Format("PDF: page content exceeds the interpreter limits; import cancelled".into()));
     }
-    if dev.type3 > 0 {
-        left.push(format!("{} characters of Type 3 fonts", dev.type3));
+    if warnings & 1 != 0 {
+        dev.left_out(LeftOut::UnsupportedFont);
     }
-    if !left.is_empty() {
-        let scanned = dev.objects == 0 && dev.images > 0;
-        d.read_notes.push(if scanned {
-            "PDF: this page is a scanned image with no lines in it, so there is nothing to import as objects".to_string()
-        } else {
-            format!("PDF: CADCraft doesn't import these yet, so they were left out: {}", left.join(", "))
-        });
+    if warnings & 2 != 0 {
+        dev.left_out(LeftOut::Image);
     }
-    Ok(d)
+    if dev.glyphs > 0 {
+        dev.approximated("text runs using the drawing's Standard font");
+    }
+    let notes = dev.note();
+    dev.drawing.read_notes.extend(notes);
+    Ok((dev.drawing, count))
 }
 
-/// What a stroke, fill or text is drawn with.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum Kind {
-    Stroke,
-    Fill,
+/// [`read`] with options as JSON, the form the engine's PDFIMPORT passes:
+/// `{page?, password?, unit?, text?, fills?, lineweights?}`. A value of the wrong type is an error.
+pub fn read_json(bytes: &[u8], opts: &serde_json::Value) -> Result<(Drawing, usize)> {
+    let mut o = PdfImportOptions::default();
+    let opts = opts.as_object().ok_or_else(|| IoError::Format("PDF: the options must be a JSON object".into()))?;
+    let bad = |key: &str, want: &str| IoError::Format(format!("PDF: `{key}` must be {want}"));
+    if let Some(v) = opts.get("page") {
+        o.page = v.as_u64().and_then(|n| usize::try_from(n).ok()).filter(|n| *n >= 1).ok_or_else(|| bad("page", "a page number from 1"))?;
+    }
+    if let Some(v) = opts.get("password") {
+        o.password = Some(v.as_str().ok_or_else(|| bad("password", "text"))?.to_string());
+    }
+    if let Some(v) = opts.get("unit") {
+        o.unit = v.as_f64().filter(|u| u.is_finite() && *u > 0.0).ok_or_else(|| bad("unit", "a positive number"))?;
+    }
+    for (key, slot) in [("text", &mut o.text), ("fills", &mut o.fills), ("lineweights", &mut o.lineweights)] {
+        if let Some(v) = opts.get(key) {
+            *slot = v.as_bool().ok_or_else(|| bad(key, "true or false"))?;
+        }
+    }
+    read(bytes, &o)
 }
 
-/// The text being collected: consecutive glyphs on one baseline.
+/// Drawn content that isn't imported, named in the drawing's read note.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum LeftOut {
+    Image,
+    Type3,
+    NoUnicode,
+    UnsupportedFont,
+    PatternFill,
+    WhiteFill,
+    OutOfRange,
+}
+
+impl LeftOut {
+    fn describe(self, n: usize) -> String {
+        let (one, many) = match self {
+            Self::Image => ("raster image", "raster images"),
+            Self::Type3 => ("Type 3 glyph", "Type 3 glyphs"),
+            Self::NoUnicode => ("glyph without a Unicode value", "glyphs without a Unicode value"),
+            Self::UnsupportedFont => ("unsupported font", "unsupported fonts"),
+            Self::PatternFill => ("gradient or pattern fill", "gradient or pattern fills"),
+            Self::WhiteFill => ("white or near-white fill", "white or near-white fills"),
+            Self::OutOfRange => ("path with out-of-range coordinates", "paths with out-of-range coordinates"),
+        };
+        format!("{n} {}", if n == 1 { one } else { many })
+    }
+}
+
+/// The glyphs of one baseline gathered so far.
 struct Run {
-    origin: Point,
-    /// Unit vector along the baseline, and the font size, in page points.
-    dir: (f64, f64),
-    size: f64,
-    /// Where the last glyph ends along the baseline (from `origin`).
-    end: f64,
+    start: Vec2,
+    /// Unit vector along the baseline.
+    dir: Vec2,
+    em: f64,
+    color: Color,
     text: String,
-    layer: String,
+    glyphs: usize,
+    /// Where the last glyph's advance ends, when the font said.
+    end: Option<Vec2>,
+    last: Vec2,
 }
 
 struct Collector {
-    opts: PdfImport,
     drawing: Drawing,
-    layers: HashMap<(Kind, [u8; 3]), String>,
-    dashes: BTreeMap<String, String>,
-    run: Option<Run>,
-    objects: usize,
+    opts: PdfImportOptions,
+    entities: usize,
     verts_left: usize,
-    images: usize,
-    type3: usize,
-    error: Option<IoError>,
+    glyphs: usize,
+    /// Characters of text the page may still add.
+    text_left: usize,
+    run: Option<Run>,
+    /// The glyphs filled since the last shape, image or stroked glyph, in paint order: where each
+    /// starts and its characters. Render mode 2 fills a whole text show and then draws it again for
+    /// its stroke; a stroke glyph that repeats the next one here is that replay and is skipped.
+    /// Each was charged to the page's text budget, which bounds the queue.
+    filled: VecDeque<(Vec2, String)>,
+    /// Whether a glyph was stroked since the last fill: the next fill starts a new queue.
+    stroking: bool,
+    left_out: BTreeMap<LeftOut, usize>,
+    failure: Option<String>,
+    /// The clips in force, outermost first: a rectangle in page points, or `None` for another shape.
+    clips: Vec<Option<Rect>>,
+    /// What was drawn only approximately, by description.
+    approx: BTreeMap<&'static str, usize>,
 }
 
-fn rgb(paint: &Paint<'_>) -> [u8; 3] {
-    match paint {
-        Paint::Color(c) => {
-            let [r, g, b, _] = c.to_rgba().to_rgba8();
-            [r, g, b]
-        }
-        // Patterns and shadings: drawn as black lines.
-        Paint::Pattern(_) => [0, 0, 0],
+fn v3(p: Vec2) -> Vec3 {
+    Vec3::new(p.x, p.y, 0.0)
+}
+
+fn pt(p: Point) -> Vec2 {
+    Vec2::new(p.x, p.y)
+}
+
+/// A PDF colour as a drawing colour; black and white (which a sheet of paper and a drawing screen
+/// swap) become the automatic colour 7.
+fn color_of(paint: &Paint<'_>) -> Option<Color> {
+    let Paint::Color(c) = paint else { return None };
+    let [r, g, b, a] = c.to_rgba().to_rgba8();
+    if a == 0 {
+        return None;
     }
+    Some(match (r, g, b) {
+        (0, 0, 0) | (255, 255, 255) => Color::Index(7),
+        _ => Color::True(Rgb(r, g, b)),
+    })
 }
 
-fn is_white(c: [u8; 3]) -> bool {
-    c.iter().all(|v| *v >= 250)
+/// A fill this light (each of red, green and blue at least this, out of 255) counts as white: table
+/// shading such as 245, 245, 245 is barely visible on paper, but as a solid hatch on a dark screen
+/// it hides the text drawn over it (which turns white there).
+const NEAR_WHITE: u8 = 240;
+
+fn is_white(paint: &Paint<'_>) -> bool {
+    matches!(paint, Paint::Color(c) if { let [r, g, b, a] = c.to_rgba().to_rgba8(); a > 0 && r.min(g).min(b) >= NEAR_WHITE })
 }
 
-/// How much `t` scales lengths (the square root of its area factor).
-fn scale_of(t: Affine) -> f64 {
-    let [a, b, c, d, _, _] = t.as_coeffs();
-    (a * d - b * c).abs().sqrt()
-}
-
-/// Segments to flatten a cubic of control-polygon length `len` (points) into.
-fn segments(len: f64) -> usize {
-    if len.is_finite() { ((len / 1.5).ceil() as usize).clamp(2, 48) } else { 2 }
-}
-
-fn cubic_at(p0: Point, p1: Point, p2: Point, p3: Point, t: f64) -> Point {
-    let u = 1.0 - t;
-    let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
-    Point::new(a * p0.x + b * p1.x + c * p2.x + d * p3.x, a * p0.y + b * p1.y + c * p2.y + d * p3.y)
-}
-
-fn poly_len(pts: &[Point]) -> f64 {
-    pts.windows(2)
-        .map(|w| match w {
-            [a, b] => a.distance(*b),
-            _ => 0.0,
-        })
-        .sum()
+/// The nearest standard lineweight to a width in millimetres.
+fn lineweight(mm: f64) -> Lineweight {
+    let hundredths = (mm * 100.0).clamp(0.0, 211.0);
+    let nearest =
+        Lineweight::STANDARD.iter().copied().min_by(|a, b| (f64::from(*a) - hundredths).abs().total_cmp(&(f64::from(*b) - hundredths).abs()));
+    Lineweight::Mm100(nearest.unwrap_or(0))
 }
 
 impl Collector {
-    fn new(opts: PdfImport) -> Self {
+    fn new(o: &PdfImportOptions) -> Self {
         Collector {
-            opts,
             drawing: Drawing::new_metric(),
-            layers: HashMap::new(),
-            dashes: BTreeMap::new(),
+            opts: o.clone(),
+            entities: 0,
+            verts_left: MAX_TOTAL_VERTS,
+            glyphs: 0,
+            text_left: MAX_TEXT_CHARS,
             run: None,
-            objects: 0,
-            verts_left: MAX_VERTS,
-            images: 0,
-            type3: 0,
-            error: None,
+            filled: VecDeque::new(),
+            stroking: false,
+            left_out: BTreeMap::new(),
+            failure: None,
+            clips: Vec::new(),
+            approx: BTreeMap::new(),
         }
     }
 
-    fn fail(&mut self, msg: &str) {
-        if self.error.is_none() {
-            self.error = Some(err(msg));
-        }
+    fn approximated(&mut self, what: &'static str) {
+        *self.approx.entry(what).or_default() += 1;
     }
 
-    fn v(&self, p: Point) -> Vec2 {
-        Vec2::new(p.x * self.opts.units_per_point, p.y * self.opts.units_per_point)
+    /// The intersection of the rectangular clips in force, as corners in drawing units.
+    fn clip(&self) -> Option<(Vec2, Vec2)> {
+        let r = self.clips.iter().flatten().copied().reduce(|a, b| a.intersect(b))?;
+        let u = self.opts.unit;
+        Some((Vec2::new(r.x0 * u, r.y0 * u), Vec2::new(r.x1 * u, r.y1 * u)))
     }
 
-    /// The layer for paths of this kind and colour, created the first time.
-    fn layer(&mut self, kind: Kind, c: [u8; 3]) -> String {
-        if let Some(l) = self.layers.get(&(kind, c)) {
-            return l.clone();
-        }
-        if self.layers.len() >= MAX_LAYERS {
-            return "PDF_Other".into();
-        }
-        let hex = format!("{:02X}{:02X}{:02X}", c[0], c[1], c[2]);
-        let name = match kind {
-            Kind::Stroke => format!("PDF_{hex}"),
-            Kind::Fill => format!("PDF_Fill_{hex}"),
+    fn add_poly(&mut self, verts: Vec<PolyVertex>, closed: bool, color: Color, weight: Lineweight) {
+        let n = verts.len();
+        let straight = verts.iter().all(|v| v.bulge == 0.0);
+        let kind = if n == 2 && !closed && straight {
+            EntityKind::Line(Line { a: v3(verts[0].p), b: v3(verts[1].p) })
+        } else {
+            EntityKind::LwPolyline(LwPolyline { vertices: verts, closed, const_width: 0.0, elevation: 0.0, plinegen: false })
         };
-        self.add_layer(&name, c);
-        self.layers.insert((kind, c), name.clone());
-        name
+        self.add(LAYER_GEOMETRY, color, weight, kind, n);
     }
 
-    fn add_layer(&mut self, name: &str, c: [u8; 3]) {
-        if self.drawing.layers.iter().any(|l| l.name.eq_ignore_ascii_case(name)) {
+    fn left_out(&mut self, kind: LeftOut) {
+        *self.left_out.entry(kind).or_default() += 1;
+    }
+
+    fn note(&self) -> Vec<String> {
+        let mut notes = Vec::new();
+        if !self.left_out.is_empty() {
+            let list: Vec<String> = self.left_out.iter().map(|(k, n)| k.describe(*n)).collect();
+            notes.push(format!("PDF: CADCraft doesn't import these, so they were left out: {}", list.join(", ")));
+        }
+        if !self.approx.is_empty() {
+            let list: Vec<String> = self.approx.iter().map(|(what, n)| format!("{n} {what}")).collect();
+            notes.push(format!("PDF: drawn only approximately: {}", list.join(", ")));
+        }
+        notes
+    }
+
+    fn fail(&mut self, why: &str) {
+        self.failure.get_or_insert_with(|| format!("PDF: {why}"));
+    }
+
+    fn add(&mut self, layer: &str, color: Color, lineweight: Lineweight, kind: EntityKind, verts: usize) {
+        if self.failure.is_some() {
             return;
         }
-        // Black and white become colour 7, which a CAD program draws in the contrast colour of
-        // its background.
-        let color = if c.iter().all(|v| *v <= 24) || is_white(c) { Color::Index(7) } else { Color::True(Rgb(c[0], c[1], c[2])) };
-        self.drawing.layers.push(Layer { name: name.to_string(), color, ..Layer::default() });
-    }
-
-    /// The linetype for a dash pattern (in page points), created the first time; `ByLayer` for
-    /// solid strokes.
-    fn linetype(&mut self, dash: &[f32], scale: f64) -> String {
-        let mut pattern: Vec<f64> = dash.iter().map(|d| f64::from(d.abs()) * scale * self.opts.units_per_point).filter(|d| d.is_finite()).collect();
-        if pattern.is_empty() || pattern.iter().sum::<f64>() <= 1e-12 {
-            return "ByLayer".into();
+        self.entities += 1;
+        if self.entities > MAX_ENTITIES {
+            return self.fail(&format!("more than {MAX_ENTITIES} objects on the page"));
         }
-        if pattern.len() % 2 == 1 {
-            pattern.extend_from_within(..);
-        }
-        let key = pattern.iter().map(|d| format!("{d:.6}")).collect::<Vec<_>>().join(",");
-        if let Some(n) = self.dashes.get(&key) {
-            return n.clone();
-        }
-        if self.dashes.len() >= MAX_LINETYPES {
-            return "ByLayer".into();
-        }
-        let name = format!("PDF_Dash{}", self.dashes.len() + 1);
-        let elements = pattern.iter().enumerate().map(|(i, d)| DashElement::dash(if i % 2 == 0 { *d } else { -*d })).collect();
-        self.drawing.linetypes.push(Linetype { name: name.clone(), description: "Dashes from PDF".into(), pattern: elements });
-        self.dashes.insert(key, name.clone());
-        name
-    }
-
-    fn add(&mut self, layer: &str, linetype: &str, kind: EntityKind) {
-        let verts = match &kind {
-            EntityKind::LwPolyline(p) => p.vertices.len(),
-            EntityKind::Spline(s) => s.control.len(),
-            _ => 2,
-        };
-        self.objects += 1;
-        match self.verts_left.checked_sub(verts) {
-            Some(v) if self.objects <= MAX_OBJECTS => self.verts_left = v,
-            _ => return self.fail("the page has more geometry than CADCraft imports at once"),
-        }
-        let common = Common { layer: layer.to_string(), linetype: linetype.to_string(), ..Common::default() };
+        let Some(left) = self.verts_left.checked_sub(verts) else { return self.fail("too much geometry on the page") };
+        self.verts_left = left;
+        let common = Common { layer: layer.into(), color, lineweight, ..Common::default() };
         if self.drawing.add(&Space::Model, common, kind).is_err() {
-            self.fail("an object could not be added");
+            self.fail("the drawing refused an object");
         }
     }
 
-    /// A run of points as a line (two points) or polyline.
-    fn polyline(&mut self, layer: &str, lt: &str, pts: &mut Vec<Point>, closed: bool) {
-        let mut v: Vec<Vec2> = pts.drain(..).map(|p| self.v(p)).collect();
-        v.dedup_by(|a, b| (a.x - b.x).abs() < 1e-12 && (a.y - b.y).abs() < 1e-12);
-        if closed
-            && v.len() > 2
-            && let (Some(f), Some(l)) = (v.first(), v.last())
-            && (f.x - l.x).abs() < 1e-12
-            && (f.y - l.y).abs() < 1e-12
-        {
-            v.pop();
+    /// The path's subpaths in drawing units: vertices (curves flattened or kept as bulges) and
+    /// whether each is closed.
+    fn subpaths(&mut self, path: &BezPath, to_page: Affine) -> Vec<(Vec<PolyVertex>, bool)> {
+        let m = Affine::scale(self.opts.unit) * to_page;
+        if !path_in_range(path, m) {
+            self.left_out(LeftOut::OutOfRange);
+            return Vec::new();
         }
-        match v.as_slice() {
-            [] | [_] => {}
-            [a, b] if !closed => self.add(layer, lt, EntityKind::Line(Line { a: Vec3::new(a.x, a.y, 0.0), b: Vec3::new(b.x, b.y, 0.0) })),
-            _ => {
-                let vertices = v.into_iter().map(PolyVertex::new).collect();
-                self.add(layer, lt, EntityKind::LwPolyline(LwPolyline { vertices, closed, const_width: 0.0, elevation: 0.0, plinegen: false }));
+        let tol = FLATTEN_TOL_PT * self.opts.unit;
+        let mut out: Vec<(Vec<PolyVertex>, bool)> = Vec::new();
+        let mut cur: Vec<PolyVertex> = Vec::new();
+        let mut start = Vec2::ZERO;
+        // The vertices in `out` so far: with those in `cur` they are held against what is left of
+        // the page's budget here, before the objects are added, so that one path of many curves
+        // can't build more than the page may hold.
+        let mut kept = 0usize;
+        let finish = |cur: &mut Vec<PolyVertex>, closed: bool, out: &mut Vec<(Vec<PolyVertex>, bool)>, kept: &mut usize| {
+            let mut v = std::mem::take(cur);
+            if closed && v.len() > 1 && v.first().zip(v.last()).is_some_and(|(a, b)| (a.p - b.p).len() < 1e-9) {
+                v.pop();
             }
-        }
-    }
-
-    /// Add `path` (already in page points) on `layer`. Strokes keep large curves as splines;
-    /// outlines (fills, glyphs) are flattened into closed polylines.
-    fn emit(&mut self, path: &BezPath, layer: &str, lt: &str, outline: bool) {
-        let mut run: Vec<Point> = Vec::new();
-        let mut start = Point::ZERO;
-        let mut cur = Point::ZERO;
+            if v.len() >= 2 {
+                *kept = kept.saturating_add(v.len());
+                out.push((v, closed));
+            }
+        };
         for el in path.elements() {
-            if self.error.is_some() {
-                return;
+            if cur.len() > MAX_POLY_VERTS {
+                self.fail("one path has too many vertices");
+                return Vec::new();
+            }
+            if kept.saturating_add(cur.len()) > self.verts_left {
+                self.fail("too much geometry on the page");
+                return Vec::new();
             }
             match *el {
                 PathEl::MoveTo(p) => {
-                    self.polyline(layer, lt, &mut run, false);
-                    run.push(p);
-                    start = p;
-                    cur = p;
+                    finish(&mut cur, false, &mut out, &mut kept);
+                    start = pt(m * p);
+                    cur.push(PolyVertex::new(start));
                 }
                 PathEl::LineTo(p) => {
-                    if run.is_empty() {
-                        run.push(cur);
+                    // After a close the current point is where the subpath started.
+                    if cur.is_empty() {
+                        cur.push(PolyVertex::new(start));
                     }
-                    run.push(p);
-                    cur = p;
+                    cur.push(PolyVertex::new(pt(m * p)));
                 }
-                PathEl::QuadTo(q, p) => {
-                    let c1 = cur + (q - cur) * (2.0 / 3.0);
-                    let c2 = p + (q - p) * (2.0 / 3.0);
-                    self.curve(layer, lt, &mut run, [cur, c1, c2, p], outline);
-                    cur = p;
+                PathEl::QuadTo(c, p) => {
+                    if cur.is_empty() {
+                        cur.push(PolyVertex::new(start));
+                    }
+                    let p0 = cur.last().map_or(start, |v| v.p);
+                    let q = pt(m * c);
+                    let p3 = pt(m * p);
+                    let c1 = p0 + (q - p0) * (2.0 / 3.0);
+                    let c2 = p3 + (q - p3) * (2.0 / 3.0);
+                    curve(&mut cur, [p0, c1, c2, p3], tol);
                 }
-                PathEl::CurveTo(c1, c2, p) => {
-                    self.curve(layer, lt, &mut run, [cur, c1, c2, p], outline);
-                    cur = p;
+                PathEl::CurveTo(a, b, p) => {
+                    if cur.is_empty() {
+                        cur.push(PolyVertex::new(start));
+                    }
+                    let p0 = cur.last().map_or(start, |v| v.p);
+                    curve(&mut cur, [p0, pt(m * a), pt(m * b), pt(m * p)], tol);
                 }
                 PathEl::ClosePath => {
-                    if !run.is_empty() {
-                        if run.last().is_some_and(|l| l.distance(start) > 1e-9) && run.len() < 2 {
-                            run.push(start);
-                        }
-                        self.polyline(layer, lt, &mut run, true);
-                    } else if cur.distance(start) > 1e-9 {
-                        // A closed shape that ended on a spline: close it with a line.
-                        let mut seg = vec![cur, start];
-                        self.polyline(layer, lt, &mut seg, false);
-                    }
-                    cur = start;
+                    finish(&mut cur, true, &mut out, &mut kept);
+                    // A path may go on from the point it closed to.
                 }
             }
         }
-        self.polyline(layer, lt, &mut run, false);
+        if cur.len() > MAX_POLY_VERTS {
+            self.fail("one path has too many vertices");
+            return Vec::new();
+        }
+        if kept.saturating_add(cur.len()) > self.verts_left {
+            self.fail("too much geometry on the page");
+            return Vec::new();
+        }
+        finish(&mut cur, false, &mut out, &mut kept);
+        out
     }
 
-    fn curve(&mut self, layer: &str, lt: &str, run: &mut Vec<Point>, c: [Point; 4], outline: bool) {
-        let [p0, p1, p2, p3] = c;
-        let len = poly_len(&c);
-        if !outline && len > SPLINE_MIN_PT {
-            // A Bézier segment is exactly a clamped cubic spline with these four control points.
-            self.polyline(layer, lt, run, false);
-            let control = c.iter().map(|p| self.v(*p)).collect();
-            self.add(layer, lt, EntityKind::Spline(Spline::from_control(control, 3)));
+    fn stroke(&mut self, path: &BezPath, to_page: Affine, paint: &Paint<'_>, width: f32) {
+        let Some(color) = color_of(paint) else { return };
+        let det = to_page.determinant().abs().sqrt();
+        let mm = f64::from(width) * det * MM_PER_PT;
+        let weight = if self.opts.lineweights { lineweight(mm) } else { Lineweight::ByLayer };
+        if translucent(paint) {
+            self.approximated("translucent objects drawn opaque");
+        }
+        let clip = self.clip();
+        for (verts, closed) in self.subpaths(path, to_page) {
+            let Some((lo, hi)) = clip else {
+                self.add_poly(verts, closed, color, weight);
+                continue;
+            };
+            match relation(&verts, closed, lo, hi) {
+                Relation::Inside => self.add_poly(verts, closed, color, weight),
+                Relation::Outside => {}
+                Relation::Crossing if verts.iter().all(|v| v.bulge == 0.0) => {
+                    for run in clipped_runs(&verts, closed, lo, hi) {
+                        self.add_poly(run, false, color, weight);
+                    }
+                }
+                Relation::Crossing => {
+                    self.approximated("curved lines crossing a clip kept whole");
+                    self.add_poly(verts, closed, color, weight);
+                }
+            }
+        }
+    }
+
+    fn fill(&mut self, path: &BezPath, to_page: Affine, paint: &Paint<'_>, rule: &FillRule) {
+        if !self.opts.fills {
             return;
         }
-        if run.is_empty() {
-            run.push(p0);
+        if is_white(paint) {
+            return self.left_out(LeftOut::WhiteFill);
         }
-        let n = segments(len);
-        for i in 1..=n {
-            run.push(cubic_at(p0, p1, p2, p3, i as f64 / n as f64));
+        let Some(color) = color_of(paint) else {
+            if matches!(paint, Paint::Pattern(_)) {
+                self.left_out(LeftOut::PatternFill);
+            }
+            return;
+        };
+        if translucent(paint) {
+            self.approximated("translucent objects drawn opaque");
         }
+        let clip = self.clip();
+        let mut kept_whole = false;
+        let loops: Vec<HatchLoop> = self
+            .subpaths(path, to_page)
+            .into_iter()
+            // Two vertices enclose an area only through an arc.
+            .filter(|(v, _)| v.len() >= 3 || (v.len() == 2 && v.iter().any(|p| p.bulge != 0.0)))
+            .filter_map(|(v, closed)| {
+                let Some((lo, hi)) = clip else { return Some((v, closed)) };
+                match relation(&v, closed, lo, hi) {
+                    Relation::Inside => Some((v, closed)),
+                    Relation::Outside => None,
+                    Relation::Crossing if v.iter().all(|p| p.bulge == 0.0) => {
+                        let cut = clip_polygon(v.iter().map(|p| p.p).collect(), lo, hi);
+                        (cut.len() >= 3).then(|| (cut.into_iter().map(PolyVertex::new).collect(), closed))
+                    }
+                    Relation::Crossing => {
+                        kept_whole = true;
+                        Some((v, closed))
+                    }
+                }
+            })
+            .enumerate()
+            .map(|(i, (vertices, _))| HatchLoop { vertices, outer: i == 0, boundary_flags: None, sources: Vec::new() })
+            .collect();
+        if kept_whole {
+            self.approximated("curved filled shapes crossing a clip kept whole");
+        }
+        if loops.is_empty() {
+            return;
+        }
+        let curved = loops.iter().any(|l| l.vertices.iter().any(|v| v.bulge != 0.0));
+        let loops = match fill::normalize(loops, *rule, self.verts_left, FLATTEN_TOL_PT * self.opts.unit) {
+            Ok(loops) => loops,
+            Err(reason) => return self.fail(reason),
+        };
+        if loops.is_empty() {
+            return;
+        }
+        if curved && loops.iter().all(|l| l.vertices.iter().all(|v| v.bulge == 0.0)) {
+            self.approximated("curved fill boundaries sampled for winding-rule conversion");
+        }
+        let verts = loops.iter().map(|l| l.vertices.len()).sum();
+        let hatch = Hatch {
+            pattern: "SOLID".into(),
+            solid: true,
+            loops,
+            scale: 1.0,
+            angle: 0.0,
+            associative: false,
+            style: 0,
+            elevation: 0.0,
+            gradient: None,
+            origin: Vec2::ZERO,
+            background: None,
+            pattern_lines: Vec::new(),
+        };
+        self.add(LAYER_FILLS, color, Lineweight::ByLayer, EntityKind::Hatch(hatch), verts);
     }
 
-    // --- text ---------------------------------------------------------------
+    fn glyph_text(&mut self, glyph: &Glyph<'_>, to_page: Affine, glyph_to_text: Affine, paint: &Paint<'_>, stroke: bool) {
+        if !self.opts.text || self.failure.is_some() {
+            return;
+        }
+        if stroke {
+            self.stroking = true;
+        } else if std::mem::take(&mut self.stroking) {
+            self.filled.clear();
+        }
+        self.glyphs += 1;
+        if self.glyphs > MAX_GLYPHS {
+            return self.fail(&format!("more than {MAX_GLYPHS} glyphs on the page"));
+        }
+        let Glyph::Outline(g) = glyph else { return self.left_out(LeftOut::Type3) };
+        let Some(color) = color_of(paint) else { return };
+        let ch = match g.as_unicode() {
+            Some(BfString::Char(c)) => c.to_string(),
+            Some(BfString::String(s)) => s,
+            None => return self.left_out(LeftOut::NoUnicode),
+        };
+        // A ToUnicode entry may map one code to a string of any length: one glyph gives at most
+        // MAX_GLYPH_CHARS characters.
+        if ch.chars().take(MAX_GLYPH_CHARS + 1).count() > MAX_GLYPH_CHARS {
+            self.approximated("glyph text mappings shortened to 32 characters");
+        }
+        let ch: String = ch.chars().filter(|c| !c.is_control() && *c != '\u{FFFD}').take(MAX_GLYPH_CHARS).collect();
+        if ch.is_empty() {
+            return;
+        }
+        // The outline's 1000-unit em square on the page, in drawing units.
+        let m = Affine::scale(self.opts.unit) * to_page * glyph_to_text;
+        let origin = pt(m * Point::ZERO);
+        let ex = pt(m * Point::new(1000.0, 0.0)) - origin;
+        let ey = pt(m * Point::new(0.0, 1000.0)) - origin;
+        let (lx, em) = (ex.len(), ey.len());
+        if !(origin.x.is_finite() && origin.y.is_finite() && lx > 0.0 && lx.is_finite() && em > 0.0 && em.is_finite()) {
+            return;
+        }
+        let dir = ex * (1.0 / lx);
+        if !(dir.x.is_finite() && dir.y.is_finite()) {
+            return;
+        }
+        let end = g.advance_width().map(|w| pt(m * Point::new(f64::from(w), 0.0))).filter(|e| e.x.is_finite() && e.y.is_finite());
+        // A glyph is kept when its middle (half its advance along, half the cap height up) lies in
+        // the clip. Its origin is no test: a plotter often clips each text to a box drawn through
+        // that origin (or ends the page clip there), and rounding then puts it a hair outside. A clip
+        // with no area (two clips that only touch) shows nothing.
+        let half = end.map_or(dir * (0.25 * em), |e| (e - origin) * 0.5);
+        let middle = origin + half + ey * (0.5 * CAP_HEIGHT);
+        if let Some((lo, hi)) = self.clip()
+            && !(lo.x < hi.x && lo.y < hi.y && (lo.x..=hi.x).contains(&middle.x) && (lo.y..=hi.y).contains(&middle.y))
+        {
+            return;
+        }
+        if stroke {
+            // The fill of this glyph may wait behind fills that are never stroked (fill-only text
+            // drawn before it): those go with it.
+            if let Some(i) = self.filled.iter().position(|(at, s)| (*at - origin).len() <= 1e-9 * em.max(1.0) && *s == ch) {
+                self.filled.drain(..=i);
+                return;
+            }
+            self.filled.clear();
+        }
+        // The characters this glyph adds, and a space before them, against the page's text budget.
+        let Some(left) = self.text_left.checked_sub(ch.chars().count().saturating_add(1)) else {
+            return self.fail(&format!("more than {MAX_TEXT_CHARS} characters of text on the page"));
+        };
+        self.text_left = left;
+        if !stroke {
+            self.filled.push_back((origin, ch.clone()));
+        }
+
+        if let Some(run) = &mut self.run {
+            // The same glyph drawn again at the same origin adds nothing; this is tested first,
+            // since the gap measured from where the glyph ended is negative.
+            if run.color == color && (origin - run.last).len() <= 1e-9 * em.max(1.0) && run.text.ends_with(&ch) {
+                return;
+            }
+            let rel = origin - run.last;
+            let along = rel.x * run.dir.x + rel.y * run.dir.y;
+            // Measured from the first glyph, so a run cannot drift off its baseline a step at a time.
+            let from_start = origin - run.start;
+            let across = (from_start.x * run.dir.y - from_start.y * run.dir.x).abs();
+            let same = run.color == color && (run.em - em).abs() <= 0.02 * em && run.dir.x * dir.x + run.dir.y * dir.y > 0.9999 && across <= 0.1 * em;
+            // Where the previous glyph ended, else the previous origin plus an average glyph.
+            let gap = match run.end {
+                Some(e) => {
+                    let d = origin - e;
+                    d.x * run.dir.x + d.y * run.dir.y
+                }
+                None => along - 0.5 * em,
+            };
+            if same && (-0.3 * em..=1.5 * em).contains(&gap) {
+                if gap > 0.15 * em && !run.text.ends_with(' ') && !ch.starts_with(' ') {
+                    run.text.push(' ');
+                }
+                // The same glyph drawn again where the last one started adds nothing.
+                if !(along.abs() < 1e-9 * em.max(1.0) && run.text.ends_with(&ch)) {
+                    run.text.push_str(&ch);
+                    run.glyphs += 1;
+                }
+                run.last = origin;
+                run.end = end;
+                return;
+            }
+        }
+        self.flush_text();
+        self.run = Some(Run { start: origin, dir, em, color, text: ch, glyphs: 1, end, last: origin });
+    }
 
     fn flush_text(&mut self) {
-        let Some(r) = self.run.take() else { return };
-        let value = r.text.trim_end().to_string();
+        let Some(run) = self.run.take() else { return };
+        let value = run.text.trim_end().to_string();
         if value.trim().is_empty() {
             return;
         }
-        let k = self.opts.units_per_point;
-        let height = r.size * 0.7 * k;
-        if !height.is_finite() || height <= 0.0 {
-            return;
-        }
-        let at = Vec3::new(r.origin.x * k, r.origin.y * k, 0.0);
-        let rotation = r.dir.1.atan2(r.dir.0);
+        let fit_end = run.end.filter(|e| run.glyphs >= 2 && (*e - run.start).len() > 1e-9);
         let text = Text {
-            insert: at,
-            align_pt: None,
-            height,
+            insert: v3(run.start),
+            align_pt: fit_end.map(v3),
+            height: run.em * CAP_HEIGHT,
             value,
-            rotation,
+            rotation: run.dir.y.atan2(run.dir.x),
             width_factor: 1.0,
             oblique: 0.0,
             style: "Standard".into(),
-            halign: HAlign::Left,
-            valign: VAlign::Baseline,
+            halign: if fit_end.is_some() { HAlign::Fit } else { HAlign::Left },
+            valign: Default::default(),
         };
-        let layer = r.layer;
-        self.add(&layer, "ByLayer", EntityKind::Text(text));
+        self.add(LAYER_TEXT, run.color, Lineweight::ByLayer, EntityKind::Text(text), 1);
     }
+}
 
-    /// One glyph with known characters: continue the current run or start a new one.
-    fn text_glyph(&mut self, s: &str, full: Affine, width: f64, layer: String) {
-        let origin = full * Point::ZERO;
-        let x = full * Point::new(1.0, 0.0) - origin;
-        let y = full * Point::new(0.0, 1.0) - origin;
-        // Glyph space has 1000 units to the em (the interpreter normalises every outline font).
-        let size = y.hypot() * 1000.0;
-        let along_len = x.hypot();
-        if !(size.is_finite() && size > 1e-6 && along_len.is_finite() && along_len > 1e-9) {
-            return;
-        }
-        let dir = (x.x / along_len, x.y / along_len);
-        let glyph_end = width * along_len;
-        if let Some(r) = &mut self.run {
-            let dx = origin.x - r.origin.x;
-            let dy = origin.y - r.origin.y;
-            let along = dx * r.dir.0 + dy * r.dir.1;
-            let perp = -dx * r.dir.1 + dy * r.dir.0;
-            let same = (size / r.size - 1.0).abs() < 0.15
-                && (dir.0 * r.dir.0 + dir.1 * r.dir.1) > 0.999
-                && perp.abs() < 0.3 * r.size
-                && r.layer == layer
-                && along > r.end - 0.5 * r.size
-                && along < r.end + 2.5 * r.size
-                && r.text.chars().count() < MAX_TEXT_CHARS;
-            if same {
-                if along - r.end > 0.25 * r.size && !r.text.ends_with(' ') && !s.starts_with(' ') {
-                    r.text.push(' ');
+/// Whether every point of the path, taken to drawing units by `m`, is finite and within
+/// [`MAX_COORD`].
+fn path_in_range(path: &BezPath, m: Affine) -> bool {
+    let ok = |p: Point| {
+        let q = m * p;
+        q.x.is_finite() && q.y.is_finite() && q.x.abs() <= MAX_COORD && q.y.abs() <= MAX_COORD
+    };
+    path.elements().iter().all(|el| match *el {
+        PathEl::MoveTo(p) | PathEl::LineTo(p) => ok(p),
+        PathEl::QuadTo(a, b) => ok(a) && ok(b),
+        PathEl::CurveTo(a, b, c) => ok(a) && ok(b) && ok(c),
+        PathEl::ClosePath => true,
+    })
+}
+
+/// Whether the paint is a colour that lets what is under it show through.
+fn translucent(paint: &Paint<'_>) -> bool {
+    matches!(paint, Paint::Color(c) if { let [_, _, _, a] = c.to_rgba().to_rgba8(); a > 0 && a < 255 })
+}
+
+/// The rectangle a clip path is, when it is one axis-aligned subpath of four or five straight
+/// points; a rectangle with no area when its subpaths enclose none, since that clip shows nothing.
+fn rect_of(path: &BezPath) -> Option<Rect> {
+    let mut subpaths: Vec<Vec<Point>> = Vec::new();
+    let mut closed = false;
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(p) => {
+                subpaths.push(vec![p]);
+                closed = false;
+            }
+            PathEl::LineTo(p) => {
+                // A line after a close starts a new subpath where the closed one started.
+                if closed {
+                    let start = subpaths.last().and_then(|s| s.first()).copied().unwrap_or(p);
+                    subpaths.push(vec![start]);
+                    closed = false;
                 }
-                r.text.push_str(s);
-                r.end = r.end.max(along + glyph_end.max(0.25 * size));
-                return;
+                match subpaths.last_mut() {
+                    Some(s) => s.push(p),
+                    None => subpaths.push(vec![p]),
+                }
+            }
+            PathEl::ClosePath => closed = true,
+            _ => return None,
+        }
+    }
+    if !subpaths.is_empty() && subpaths.iter().all(|s| collinear(s)) {
+        return Some(Rect::ZERO);
+    }
+    let [pts] = subpaths.as_slice() else { return None };
+    let mut pts = pts.clone();
+    if !(4..=5).contains(&pts.len()) {
+        return None;
+    }
+    if pts.len() == 5 {
+        if pts.first() != pts.last() {
+            return None;
+        }
+        pts.pop();
+    }
+    // Four corners connected diagonally can form a bow tie, not a rectangular clip.
+    if !(0..4).all(|i| {
+        let (a, b) = (pts[i], pts[(i + 1) % 4]);
+        a != b && ((a.x - b.x).abs() < 1e-6 || (a.y - b.y).abs() < 1e-6)
+    }) {
+        return None;
+    }
+    let (x0, x1) = pts.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.x), b.max(p.x)));
+    let (y0, y1) = pts.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+    let on = |v: f64, a: f64, b: f64| (v - a).abs() < 1e-6 || (v - b).abs() < 1e-6;
+    // A path that goes back along an edge touches the box without enclosing it; a box with no area
+    // clips everything, as the PDF does.
+    let flat = (x1 - x0).abs() < 1e-6 || (y1 - y0).abs() < 1e-6;
+    let at = |p: &Point, x: f64, y: f64| (p.x - x).abs() < 1e-6 && (p.y - y).abs() < 1e-6;
+    let corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)].iter().all(|&(x, y)| pts.iter().filter(|p| at(p, x, y)).count() == 1);
+    (pts.iter().all(|p| on(p.x, x0, x1) && on(p.y, y0, y1)) && (flat || corners) && x0.is_finite() && y0.is_finite())
+        .then(|| Rect::new(x0, y0, x1, y1))
+}
+
+/// Whether the points lie on one straight line, or at one point, to a millionth of a point.
+fn collinear(pts: &[Point]) -> bool {
+    let Some(&a) = pts.first() else { return true };
+    let far = pts.iter().map(|p| *p - a).max_by(|u, v| u.hypot2().total_cmp(&v.hypot2())).unwrap_or_default();
+    let len = far.hypot();
+    len < 1e-6 || pts.iter().all(|p| (far.cross(*p - a) / len).abs() < 1e-6)
+}
+
+/// How a shape lies against a clip rectangle.
+enum Relation {
+    Inside,
+    Outside,
+    Crossing,
+}
+
+fn relation(verts: &[PolyVertex], closed: bool, lo: Vec2, hi: Vec2) -> Relation {
+    const EPS: f64 = 1e-9;
+    if lo.x >= hi.x || lo.y >= hi.y {
+        return Relation::Outside;
+    }
+    let (mut min, mut max) = (Vec2::new(f64::MAX, f64::MAX), Vec2::new(f64::MIN, f64::MIN));
+    for v in verts {
+        min = Vec2::new(min.x.min(v.p.x), min.y.min(v.p.y));
+        max = Vec2::new(max.x.max(v.p.x), max.y.max(v.p.y));
+    }
+    // A bulged edge can enter a clip even when both endpoints are outside it.
+    if verts.iter().any(|v| v.bulge != 0.0) {
+        let bounds = Polyline { vertices: verts.to_vec(), closed }.bounds();
+        min = bounds.min;
+        max = bounds.max;
+    }
+    if min.x >= lo.x - EPS && min.y >= lo.y - EPS && max.x <= hi.x + EPS && max.y <= hi.y + EPS {
+        Relation::Inside
+    } else if max.x < lo.x || min.x > hi.x || max.y < lo.y || min.y > hi.y {
+        Relation::Outside
+    } else {
+        Relation::Crossing
+    }
+}
+
+/// The part of the segment a to b inside the rectangle (Liang-Barsky).
+fn clip_segment(a: Vec2, b: Vec2, lo: Vec2, hi: Vec2) -> Option<(Vec2, Vec2)> {
+    let d = b - a;
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for (p, q) in [(-d.x, a.x - lo.x), (d.x, hi.x - a.x), (-d.y, a.y - lo.y), (d.y, hi.y - a.y)] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+        } else {
+            let r = q / p;
+            if p < 0.0 {
+                if r > t1 {
+                    return None;
+                }
+                t0 = t0.max(r);
+            } else {
+                if r < t0 {
+                    return None;
+                }
+                t1 = t1.min(r);
             }
         }
-        self.flush_text();
-        self.run = Some(Run { origin, dir, size, end: glyph_end.max(0.25 * size), text: s.to_string(), layer });
     }
+    Some((a + d * t0, a + d * t1))
+}
+
+/// The pieces of a straight-sided polyline inside the rectangle, each an open run of vertices.
+fn clipped_runs(verts: &[PolyVertex], closed: bool, lo: Vec2, hi: Vec2) -> Vec<Vec<PolyVertex>> {
+    fn flush(cur: &mut Vec<PolyVertex>, runs: &mut Vec<Vec<PolyVertex>>) {
+        let run = std::mem::take(cur);
+        if run.windows(2).any(|w| (w[0].p - w[1].p).len() > 1e-9) {
+            runs.push(run);
+        }
+    }
+    let n = verts.len();
+    let segments = if closed { n } else { n.saturating_sub(1) };
+    let (mut runs, mut cur) = (Vec::new(), Vec::new());
+    for i in 0..segments {
+        match clip_segment(verts[i].p, verts[(i + 1) % n].p, lo, hi) {
+            None => flush(&mut cur, &mut runs),
+            Some((p, q)) => {
+                if cur.last().is_none_or(|l: &PolyVertex| (l.p - p).len() > 1e-9) {
+                    flush(&mut cur, &mut runs);
+                    cur.push(PolyVertex::new(p));
+                }
+                cur.push(PolyVertex::new(q));
+            }
+        }
+    }
+    flush(&mut cur, &mut runs);
+    runs
+}
+
+/// A polygon cut to the rectangle (Sutherland-Hodgman).
+fn clip_polygon(mut poly: Vec<Vec2>, lo: Vec2, hi: Vec2) -> Vec<Vec2> {
+    // Each edge: the axis (0 = x, 1 = y), its value and whether the kept side is the greater one.
+    for (axis, value, keep_greater) in [(0, lo.x, true), (0, hi.x, false), (1, lo.y, true), (1, hi.y, false)] {
+        let get = |v: Vec2| if axis == 0 { v.x } else { v.y };
+        let inside = |v: Vec2| if keep_greater { get(v) >= value } else { get(v) <= value };
+        let mut out = Vec::with_capacity(poly.len() + 4);
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            if inside(a) {
+                out.push(a);
+            }
+            if inside(a) != inside(b) {
+                out.push(a + (b - a) * ((value - get(a)) / (get(b) - get(a))));
+            }
+        }
+        poly = out;
+        if poly.is_empty() {
+            break;
+        }
+    }
+    poly
+}
+
+/// Append a cubic from the last vertex of `cur`: a circular arc becomes a bulge on that vertex,
+/// any other curve is flattened to `tol`.
+fn curve(cur: &mut Vec<PolyVertex>, c: [Vec2; 4], tol: f64) {
+    if let Some(bulge) = arc_bulge(c, tol) {
+        if let Some(last) = cur.last_mut() {
+            last.bulge = bulge;
+        }
+        cur.push(PolyVertex::new(c[3]));
+        return;
+    }
+    let path = [
+        PathEl::MoveTo(Point::new(c[0].x, c[0].y)),
+        PathEl::CurveTo(Point::new(c[1].x, c[1].y), Point::new(c[2].x, c[2].y), Point::new(c[3].x, c[3].y)),
+    ];
+    // The segment count grows with the curve's size over the tolerance: keep the tolerance from
+    // falling below a fixed fraction of the size.
+    let (lo, hi) = c.iter().fold((Vec2::new(f64::MAX, f64::MAX), Vec2::new(f64::MIN, f64::MIN)), |(lo, hi), p| {
+        (Vec2::new(lo.x.min(p.x), lo.y.min(p.y)), Vec2::new(hi.x.max(p.x), hi.y.max(p.y)))
+    });
+    let size = (hi.x - lo.x).max(hi.y - lo.y);
+    kurbo::flatten(path, tol.max(size / CURVE_RESOLUTION).max(1e-9), |el| {
+        // Past the cap the rest is dropped; the caller's next check refuses the path.
+        if let PathEl::LineTo(p) = el
+            && cur.len() <= MAX_POLY_VERTS
+        {
+            cur.push(PolyVertex::new(pt(p)));
+        }
+    });
+}
+
+fn cubic_at(c: &[Vec2; 4], t: f64) -> Vec2 {
+    let u = 1.0 - t;
+    c[0] * (u * u * u) + c[1] * (3.0 * u * u * t) + c[2] * (3.0 * u * t * t) + c[3] * (t * t * t)
+}
+
+/// The bulge of the circular arc a cubic stays within `tol` of, if it is one (and under a full turn).
+fn arc_bulge(c: [Vec2; 4], tol: f64) -> Option<f64> {
+    let (a, m, b) = (c[0], cubic_at(&c, 0.5), c[3]);
+    let chord = b - a;
+    let len = chord.len();
+    if !(len.is_finite() && len > 100.0 * tol) {
+        return None;
+    }
+    // The circle through the ends and the middle.
+    let d = 2.0 * (a.x * (m.y - b.y) + m.x * (b.y - a.y) + b.x * (a.y - m.y));
+    if d.abs() < 1e-12 * len * len {
+        return None;
+    }
+    let (a2, m2, b2) = (a.x * a.x + a.y * a.y, m.x * m.x + m.y * m.y, b.x * b.x + b.y * b.y);
+    let center =
+        Vec2::new((a2 * (m.y - b.y) + m2 * (b.y - a.y) + b2 * (a.y - m.y)) / d, (a2 * (b.x - m.x) + m2 * (a.x - b.x) + b2 * (m.x - a.x)) / d);
+    let r = (a - center).len();
+    if !r.is_finite() || r < len * 0.5 * (1.0 - 1e-9) {
+        return None;
+    }
+    // Every sample must lie on it.
+    for t in [0.125, 0.25, 0.375, 0.625, 0.75, 0.875] {
+        if ((cubic_at(&c, t) - center).len() - r).abs() > tol {
+            return None;
+        }
+    }
+    // The arc from a to b through m runs counter-clockwise when m lies to the right of a→b.
+    let ccw = chord.x * (m.y - a.y) - chord.y * (m.x - a.x) < 0.0;
+    let half = (len * 0.5 / r).clamp(-1.0, 1.0).asin();
+    // The middle lies on the minor arc, unless it is further from the chord than the radius.
+    let sag = ((m - a).x * chord.y - (m - a).y * chord.x).abs() / len;
+    let theta = if sag > r { std::f64::consts::TAU - 2.0 * half } else { 2.0 * half };
+    if theta >= std::f64::consts::TAU - 1e-6 {
+        return None;
+    }
+    let bulge = (theta / 4.0).tan();
+    Some(if ccw { bulge } else { -bulge })
 }
 
 impl<'a> Device<'a> for Collector {
-    fn set_soft_mask(&mut self, _mask: Option<SoftMask<'a>>) {}
-    fn set_blend_mode(&mut self, _blend_mode: BlendMode) {}
-
-    fn draw_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint<'a>, draw_mode: &PathDrawMode) {
-        if self.error.is_some() {
-            return;
-        }
-        let c = rgb(paint);
-        let page = transform * path.clone();
-        match draw_mode {
-            PathDrawMode::Stroke(props) => {
-                let layer = self.layer(Kind::Stroke, c);
-                let lt = self.linetype(&props.dash_array, scale_of(transform));
-                self.emit(&page, &layer, &lt, false);
-            }
-            PathDrawMode::Fill(_) => {
-                if !self.opts.fills || (is_white(c) && !self.opts.white_fills) {
-                    return;
-                }
-                let layer = self.layer(Kind::Fill, c);
-                self.emit(&page, &layer, "ByLayer", true);
-            }
+    fn set_soft_mask(&mut self, mask: Option<SoftMask<'a>>) {
+        if mask.is_some() {
+            self.approximated("soft masks not applied");
         }
     }
-
-    fn push_clip_path(&mut self, _clip_path: &ClipPath) {}
-    fn push_transparency_group(&mut self, _opacity: f32, _mask: Option<SoftMask<'a>>, _blend_mode: BlendMode) {}
-
-    fn draw_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, glyph_transform: Affine, paint: &Paint<'a>, draw_mode: &GlyphDrawMode) {
-        if self.error.is_some() || matches!(draw_mode, GlyphDrawMode::Invisible | GlyphDrawMode::Clip) {
-            return;
+    fn set_blend_mode(&mut self, mode: BlendMode) {
+        if mode != BlendMode::Normal {
+            self.approximated("blend modes not applied");
         }
-        let full = transform * glyph_transform;
-        let outline = match glyph {
-            Glyph::Outline(g) => g.outline(),
-            Glyph::Type3(_) => {
-                self.type3 += 1;
-                return;
-            }
-        };
-        let c = rgb(paint);
-        if self.opts.text
-            && let Some(u) = glyph.as_unicode()
-        {
-            let s = match u {
-                craft_pdf::interpret::hayro_cmap::BfString::Char(ch) => ch.to_string(),
-                craft_pdf::interpret::hayro_cmap::BfString::String(s) => s,
-            };
-            if !s.is_empty() && !s.chars().any(char::is_control) {
-                let width = outline.bounding_box().x1.max(0.0);
-                self.add_layer("PDF_Text", [0, 0, 0]);
-                self.text_glyph(&s, full, width, "PDF_Text".into());
-                return;
-            }
-        }
-        let path = full * outline;
-        if path.elements().is_empty() {
+    }
+    fn draw_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint<'a>, mode: &PathDrawMode) {
+        if self.failure.is_some() {
             return;
         }
         self.flush_text();
-        let layer = self.layer(Kind::Fill, c);
-        self.emit(&path, &layer, "ByLayer", true);
+        // Text drawn again after a shape is a new label on top, not the stroke of the text before.
+        self.filled.clear();
+        match mode {
+            PathDrawMode::Fill(rule) => self.fill(path, transform, paint, rule),
+            PathDrawMode::Stroke(p) => {
+                if !p.dash_array.is_empty() {
+                    self.approximated("dashed paths imported as continuous lines");
+                }
+                self.stroke(path, transform, paint, p.line_width);
+            }
+        }
     }
-
-    fn draw_image(&mut self, _image: Image<'a, '_>, _transform: Affine) {
-        self.images += 1;
+    fn push_clip_path(&mut self, clip: &ClipPath) {
+        self.flush_text();
+        let rect = rect_of(&clip.path);
+        if rect.is_none() {
+            self.approximated("clips by a shape other than a rectangle not applied");
+        }
+        self.clips.push(rect);
     }
-
-    fn pop_clip_path(&mut self) {}
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>, mode: BlendMode) {
+        self.flush_text();
+        self.set_soft_mask(mask);
+        self.set_blend_mode(mode);
+        if opacity < 1.0 {
+            self.approximated("translucent groups drawn opaque");
+        }
+    }
+    fn draw_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, glyph_transform: Affine, paint: &Paint<'a>, mode: &GlyphDrawMode) {
+        match mode {
+            GlyphDrawMode::Fill => self.glyph_text(glyph, transform, glyph_transform, paint, false),
+            GlyphDrawMode::Stroke(_) => self.glyph_text(glyph, transform, glyph_transform, paint, true),
+            _ => {}
+        }
+    }
+    fn draw_image(&mut self, _: Image<'a, '_>, _: Affine) {
+        self.flush_text();
+        self.filled.clear();
+        self.left_out(LeftOut::Image);
+    }
+    fn pop_clip_path(&mut self) {
+        self.flush_text();
+        self.clips.pop();
+    }
     fn pop_transparency_group(&mut self) {}
-}
-
-/// The page count and the size of page 1 in points, for PDFIMPORT's prompts.
-pub fn describe(bytes: &[u8]) -> Result<(usize, f64, f64)> {
-    let pdf = open(bytes)?;
-    let pages = pdf.pages();
-    let (w, h) = pages.first().map(|p| p.render_dimensions()).unwrap_or((0.0, 0.0));
-    Ok((pages.len(), f64::from(w), f64::from(h)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cadcraft_doc::Entity;
 
-    /// A one-page PDF with `content` as its page content stream (uncompressed) and Helvetica as
-    /// font /F1; `page_extra` goes into the page dictionary (e.g. `/Rotate 90`).
-    fn pdf(content: &str, page_extra: &str) -> Vec<u8> {
-        let objs = [
-            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-            format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R {page_extra} >>"),
-            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_string(),
-        ];
-        let mut out = b"%PDF-1.7\n".to_vec();
-        let mut offsets = Vec::new();
-        for (i, o) in objs.iter().enumerate() {
-            offsets.push(out.len());
-            out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    /// A one-page PDF, 600 x 800 points, drawing `content`.
+    fn page(content: &str) -> Vec<u8> {
+        format!(
+            "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+             2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+             3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R >> endobj\n\
+             4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\n\
+             trailer << /Root 1 0 R >>\n%%EOF\n",
+            content.len()
+        )
+        .into_bytes()
+    }
+
+    #[test]
+    fn many_curves_in_one_path_stop_at_the_vertex_budget() {
+        // About 500 vertices a curve and 200 curves in one path: some 100 000 vertices against a
+        // budget of 10 000. The path is refused while its subpaths are built, also when a clip
+        // would have left all of it out.
+        let curves = "0 0 m 0 1 1 1 1 0 c ".repeat(200);
+        let o = PdfImportOptions::default();
+        let whole = format!("1000000 0 0 1000000 0 0 cm {curves}S");
+        let clipped = format!("q 0 0 1 1 re W n 1000000 0 0 1000000 5000000 5000000 cm {curves}S Q");
+        for content in [&whole, &clipped] {
+            let e = read_within(&page(content), &o, 10_000).unwrap_err().to_string();
+            assert!(e.contains("too much geometry on the page"), "{e}");
         }
-        let xref = out.len();
-        out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
-        for o in offsets {
-            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
-        }
-        out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
-        out
-    }
-
-    fn at_scale(units_per_point: f64) -> PdfImport {
-        PdfImport { units_per_point, ..PdfImport::default() }
-    }
-
-    fn model(d: &Drawing) -> Vec<&Entity> {
-        d.model.iter().map(|e| &**e).collect()
-    }
-
-    #[test]
-    fn a_stroked_line_comes_in_at_scale() {
-        let bytes = pdf("1 0 0 RG 72 100 m 144 100 l S", "");
-        let d = import(&bytes, &at_scale(1.0)).unwrap();
-        let ents = model(&d);
-        assert_eq!(ents.len(), 1);
-        let EntityKind::Line(l) = &ents[0].kind else { panic!("{:?}", ents[0].kind) };
-        assert!((l.a.x - 72.0).abs() < 1e-6 && (l.a.y - 100.0).abs() < 1e-6, "{l:?}");
-        assert!((l.b.x - 144.0).abs() < 1e-6, "{l:?}");
-        assert_eq!(ents[0].common.layer, "PDF_FF0000");
-        let layer = d.layers.iter().find(|l| l.name == "PDF_FF0000").unwrap();
-        assert_eq!(layer.color, Color::True(Rgb(255, 0, 0)));
-
-        // 1:50 in metres: one inch on the sheet is 1.27 m.
-        let d = import(&bytes, &at_scale(25.4 / 72.0 * 50.0 / 1000.0)).unwrap();
-        let EntityKind::Line(l) = &model(&d)[0].kind else { panic!() };
-        assert!((l.b.x - l.a.x - 1.27).abs() < 1e-9, "{l:?}");
-    }
-
-    #[test]
-    fn black_layers_take_colour_7() {
-        let d = import(&pdf("0 G 0 0 m 10 10 l S", ""), &PdfImport::default()).unwrap();
-        assert_eq!(d.layers.iter().find(|l| l.name == "PDF_000000").unwrap().color, Color::Index(7));
-    }
-
-    #[test]
-    fn rectangles_are_closed_polylines_and_curves_splines() {
-        let d = import(&pdf("10 10 100 50 re S 0 0 m 0 100 100 100 100 0 c S", ""), &at_scale(1.0)).unwrap();
-        let kinds: Vec<_> = model(&d).iter().map(|e| e.kind.clone()).collect();
-        assert!(matches!(&kinds[0], EntityKind::LwPolyline(p) if p.closed && p.vertices.len() == 4), "{kinds:?}");
-        assert!(matches!(&kinds[1], EntityKind::Spline(s) if s.control.len() == 4), "{kinds:?}");
-    }
-
-    #[test]
-    fn dashes_become_a_linetype_at_scale() {
-        let d = import(&pdf("[6 3] 0 d 0 0 m 100 0 l S", ""), &at_scale(2.0)).unwrap();
-        let e = model(&d)[0];
-        assert_eq!(e.common.linetype, "PDF_Dash1");
-        let lt = d.linetypes.iter().find(|l| l.name == "PDF_Dash1").unwrap();
-        let lens: Vec<f64> = lt.pattern.iter().map(|p| p.length).collect();
-        assert_eq!(lens, vec![12.0, -6.0]);
-    }
-
-    #[test]
-    fn white_fills_are_left_out_unless_asked_for() {
-        let bytes = pdf("1 g 0 0 100 100 re f 0.5 g 10 10 20 20 re f", "");
-        let d = import(&bytes, &at_scale(1.0)).unwrap();
-        assert_eq!(model(&d).len(), 1);
-        assert_eq!(model(&d)[0].common.layer, "PDF_Fill_808080");
-        let d = import(&bytes, &PdfImport { white_fills: true, ..at_scale(1.0) }).unwrap();
-        assert_eq!(model(&d).len(), 2);
-        let d = import(&bytes, &PdfImport { fills: false, ..at_scale(1.0) }).unwrap();
-        assert!(model(&d).is_empty());
-    }
-
-    #[test]
-    fn text_becomes_text_on_its_baseline() {
-        let d = import(&pdf("BT /F1 20 Tf 100 200 Td (Hello world) Tj ET", ""), &at_scale(1.0)).unwrap();
-        let texts: Vec<_> = model(&d).iter().filter_map(|e| if let EntityKind::Text(t) = &e.kind { Some(t.clone()) } else { None }).collect();
-        assert_eq!(texts.len(), 1, "{texts:?}");
-        let t = &texts[0];
-        assert_eq!(t.value, "Hello world");
-        assert!((t.insert.x - 100.0).abs() < 1e-6 && (t.insert.y - 200.0).abs() < 1e-6, "{t:?}");
-        assert!((t.height - 14.0).abs() < 1e-6, "{t:?}");
-        assert!(t.rotation.abs() < 1e-9);
-
-        // Without text, the glyphs are outlines.
-        let d = import(&pdf("BT /F1 20 Tf 100 200 Td (Hi) Tj ET", ""), &PdfImport { text: false, ..at_scale(1.0) }).unwrap();
-        assert!(!model(&d).is_empty() && model(&d).iter().all(|e| matches!(e.kind, EntityKind::LwPolyline(_))));
-    }
-
-    #[test]
-    fn a_rotated_page_comes_in_as_shown() {
-        // /Rotate 90 shows the 595 × 842 page landscape: 842 wide, 595 high.
-        let d = import(&pdf("0 0 m 595 0 l S", "/Rotate 90"), &at_scale(1.0)).unwrap();
-        let EntityKind::Line(l) = &model(&d)[0].kind else { panic!() };
-        for p in [l.a, l.b] {
-            assert!((-1e-6..=842.0 + 1e-6).contains(&p.x) && (-1e-6..=595.0 + 1e-6).contains(&p.y), "{l:?}");
-        }
-        assert!(((l.a.y - l.b.y).abs() - 595.0).abs() < 1e-6, "the page's bottom edge stands upright: {l:?}");
-    }
-
-    #[test]
-    fn pages_are_counted_and_checked() {
-        let bytes = pdf("0 0 m 1 1 l S", "");
-        assert_eq!(page_count(&bytes).unwrap(), 1);
-        assert!(import(&bytes, &PdfImport { page: 2, ..PdfImport::default() }).is_err());
-        assert!(import(&bytes, &PdfImport { page: 0, ..PdfImport::default() }).is_err());
-    }
-
-    #[test]
-    fn hostile_pdf_does_not_panic() {
-        for bytes in [
-            Vec::new(),
-            b"%PDF-1.7\n".to_vec(),
-            b"not a pdf at all".to_vec(),
-            pdf("1e308 1e308 m -1e308 -1e308 l S", ""),
-            pdf("q q q q q 0 0 m 1 1 l S", ""),
-            pdf("[1e30 -5] 0 d 0 0 m 1 1 l S", ""),
-            pdf("0 0 m 1 1 c S 1 2 3 re f* BT /F9 0 Tf (x) Tj ET", ""),
-        ] {
-            let _ = page_count(&bytes);
-            let _ = import(&bytes, &PdfImport::default());
-        }
-        for k in [0.0, -1.0, f64::NAN, f64::INFINITY, 1e300] {
-            assert!(import(&pdf("0 0 m 1 1 l S", ""), &at_scale(k)).is_err(), "{k}");
-        }
+        // Within the budget the same path is read.
+        let (d, _) = read_within(&page(&whole), &o, MAX_TOTAL_VERTS).unwrap();
+        assert_eq!(d.model.iter().count(), 200);
     }
 }

@@ -141,7 +141,7 @@ fn hatch(loops: Vec<Vec<Vec2>>, scale: f64) -> EntityKind {
         solid: false,
         loops: loops
             .into_iter()
-            .map(|l| HatchLoop { vertices: l.into_iter().map(PolyVertex::new).collect(), outer: true, sources: Vec::new() })
+            .map(|l| HatchLoop { vertices: l.into_iter().map(PolyVertex::new).collect(), outer: true, sources: Vec::new(), boundary_flags: None })
             .collect(),
         // ANSI31's lines are 3.175 units apart: 1.5 mm on paper at 1:scale, in metres.
         scale: 0.0015 * scale / 3.175,
@@ -462,7 +462,12 @@ fn cut_hatch(s: &mut Session, space: &Space, mid: Vec2, u: Vec2, o1: f64, o2: f6
                 ht.loops.remove(li);
                 for part in [before, after] {
                     if part.len() >= 3 && area(&part) > 1e-8 {
-                        ht.loops.push(HatchLoop { vertices: part.into_iter().map(PolyVertex::new).collect(), outer: true, sources: Vec::new() });
+                        ht.loops.push(HatchLoop {
+                            vertices: part.into_iter().map(PolyVertex::new).collect(),
+                            outer: true,
+                            sources: Vec::new(),
+                            boundary_flags: None,
+                        });
                     }
                 }
             }

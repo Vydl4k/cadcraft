@@ -419,6 +419,7 @@ pub(super) fn apply(n: &mut Nastaveni, p: &Value) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn read_template(path: &str) -> Result<Nastaveni> {
+    crate::file_access::check_read(path).map_err(|e| bad(CMD, e))?;
     let len = std::fs::metadata(path).map_err(|e| bad(CMD, format!("{path}: {e}")))?.len();
     if len > MAX_JSON as u64 {
         return Err(bad(CMD, format!("{path} is not a settings template")));
@@ -435,6 +436,7 @@ fn read_template(_path: &str) -> Result<Nastaveni> {
 #[cfg(not(target_arch = "wasm32"))]
 fn write_template(path: &str, n: &Nastaveni) -> Result<()> {
     let t = serde_json::to_string_pretty(n).map_err(|e| bad(CMD, e.to_string()))?;
+    crate::file_access::check_write(path).map_err(|e| bad(CMD, e))?;
     std::fs::write(path, t).map_err(|e| bad(CMD, format!("{path}: {e}")))
 }
 

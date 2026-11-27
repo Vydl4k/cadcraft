@@ -184,6 +184,7 @@ fn run_geovfk(s: &mut Session, p: &Value) -> Result<Value> {
         (None, Some(path)) => {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                crate::file_access::check_read(path).map_err(|e| bad(CMD, e))?;
                 let meta = std::fs::metadata(path).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
                 if meta.len() > 2 * 1024 * 1024 * 1024 {
                     return Err(bad(CMD, format!("{path}: larger than 2 GB")));

@@ -531,6 +531,7 @@ fn run_geoimportxml(s: &mut Session, p: &Value) -> Result<Value> {
         (None, Some(path)) => {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                crate::file_access::check_read(path).map_err(|e| bad(CMD, e))?;
                 let meta = std::fs::metadata(path).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
                 if meta.len() > 1024 * 1024 * 1024 {
                     return Err(bad(CMD, format!("{path}: larger than 1 GB")));
@@ -739,6 +740,7 @@ fn run_geohecras(s: &mut Session, p: &Value) -> Result<Value> {
         Some(path) => {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                crate::file_access::check_write(path).map_err(|e| bad(CMD, e))?;
                 std::fs::write(path, out.as_bytes()).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
                 Ok(json!({ "sections": n, "length": length, "message": format!("{msg}, written to {path}") }))
             }

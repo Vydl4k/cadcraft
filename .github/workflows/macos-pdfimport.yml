@@ -41,7 +41,7 @@ jobs:
 
       - name: Build and package (ad-hoc signed)
         env:
-          CADCRAFT_VERSION: 0.20.1-${{ github.ref_name }}
+          CADCRAFT_VERSION: 0.21.0-${{ github.ref_name }}
         # The log's tail becomes annotations, which show without signing in to GitHub.
         run: |
           set -o pipefail

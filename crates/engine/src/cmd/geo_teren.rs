@@ -393,6 +393,7 @@ fn run_geostl(s: &mut Session, p: &Value) -> Result<Value> {
         Some(path) => {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                crate::file_access::check_write(path).map_err(|e| bad(CMD, e))?;
                 std::fs::write(path, out.as_bytes()).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
                 Ok(json!({ "triangles": n, "message": format!("{msg}, written to {path}") }))
             }

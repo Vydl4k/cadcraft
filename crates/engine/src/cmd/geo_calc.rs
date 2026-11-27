@@ -800,6 +800,7 @@ fn run_geoseznam(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(path) = str_param(p, "path") {
         #[cfg(not(target_arch = "wasm32"))]
         {
+            crate::file_access::check_write(path).map_err(|e| bad(CMD, e))?;
             std::fs::write(path, &out).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
             return Ok(json!({ "points": count, "message": format!("{count} points written to {path}") }));
         }

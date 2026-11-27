@@ -224,6 +224,7 @@ fn source_points(s: &Session, p: &Value, space: &Space) -> Result<Vec<(String, V
         (None, Some(path)) => {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                crate::file_access::check_read(path).map_err(|e| bad(CMD, e))?;
                 let meta = std::fs::metadata(path).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
                 if meta.len() > 200 * 1024 * 1024 {
                     return Err(bad(CMD, format!("{path}: larger than 200 MB")));

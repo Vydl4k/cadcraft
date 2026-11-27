@@ -364,6 +364,7 @@ fn run_pasport(s: &mut Session, p: &Value) -> Result<Value> {
 fn write_file(path: &str, text: &str, cmd: &str) -> Result<()> {
     let mut bytes = b"\xEF\xBB\xBF".to_vec();
     bytes.extend_from_slice(text.as_bytes());
+    crate::file_access::check_write(path).map_err(|e| bad(cmd, e))?;
     std::fs::write(path, bytes).map_err(|e| bad(cmd, format!("{path}: {e}")))
 }
 
@@ -374,6 +375,7 @@ fn write_file(_path: &str, _text: &str, cmd: &str) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn write_plain(path: &str, text: &str, cmd: &str) -> Result<()> {
+    crate::file_access::check_write(path).map_err(|e| bad(cmd, e))?;
     std::fs::write(path, text).map_err(|e| bad(cmd, format!("{path}: {e}")))
 }
 
@@ -384,6 +386,7 @@ fn write_plain(_path: &str, _text: &str, cmd: &str) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn read_layers(path: &str) -> Result<Vec<Layer>> {
+    crate::file_access::check_read(path).map_err(|e| bad("geohladiny", e))?;
     let len = std::fs::metadata(path).map_err(|e| bad("geohladiny", format!("{path}: {e}")))?.len();
     if len > MAX_TEMPLATE {
         return Err(bad("geohladiny", format!("{path} is not a layer template")));

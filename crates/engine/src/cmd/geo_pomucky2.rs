@@ -333,6 +333,7 @@ fn write_csv(path: &str, text: &str) -> Result<()> {
     // With a byte order mark, so a spreadsheet reads the Czech letters right.
     let mut bytes = b"\xEF\xBB\xBF".to_vec();
     bytes.extend_from_slice(text.as_bytes());
+    crate::file_access::check_write(path).map_err(|e| bad("geozabory", e))?;
     std::fs::write(path, bytes).map_err(|e| bad("geozabory", format!("{path}: {e}")))
 }
 

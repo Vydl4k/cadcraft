@@ -49,6 +49,7 @@ fn write_or_return(path: Option<&str>, text: String, cmd: &str, what: Value) -> 
         Some(path) => {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                crate::file_access::check_write(path).map_err(|e| bad(cmd, e))?;
                 std::fs::write(path, text.as_bytes()).map_err(|e| bad(cmd, format!("{path}: {e}")))?;
                 if let Some(o) = what.as_object_mut() {
                     let m = o.get("message").and_then(Value::as_str).unwrap_or("").to_string();
