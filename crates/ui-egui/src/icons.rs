@@ -211,6 +211,26 @@ pub enum Icon {
     GeoTinDelete,
     GeoTinHeight,
     GeoCadastreOld,
+    GeoAddPoint,
+    GeoBulkPoints,
+    GeoInterpolate,
+    GeoIdentify,
+    GeoEditHeight,
+    GeoZeroZ,
+    GeoOutside,
+    GeoKuNumbers,
+    GeoMapScale,
+    GeoRotateSituation,
+    GeoStatistics,
+    GeoArcsToSegments,
+    GeoJoin3d,
+    GeoTextRotate,
+    GeoParcel,
+    GeoUtilityLabel,
+    GeoLeader,
+    GeoRoom,
+    GeoStairs,
+    GeoArrow,
     PdfImport,
 }
 
@@ -513,6 +533,9 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
         | GeoCadastre => paint_geo_more(pen, icon, b, a),
         GeoIntersect | GeoOrtho | GeoCurve | GeoTies | GeoMerge | GeoDrape | GeoImportXml | GeoHecRas | GeoTinAdd | GeoTinRemove | GeoTinDelete
         | GeoTinHeight | GeoCadastreOld => paint_geo_calc(pen, icon, b, a),
+        GeoAddPoint | GeoBulkPoints | GeoInterpolate | GeoIdentify | GeoEditHeight | GeoZeroZ | GeoOutside | GeoKuNumbers | GeoMapScale
+        | GeoRotateSituation | GeoStatistics | GeoArcsToSegments | GeoJoin3d | GeoTextRotate | GeoParcel | GeoUtilityLabel | GeoLeader | GeoRoom
+        | GeoStairs | GeoArrow => paint_geo_ops(pen, icon, b, a),
         GeoKml => {
             // A globe with a pin.
             pen.c(12.0, 13.0, 8.0, b);
@@ -1620,6 +1643,162 @@ fn paint_geo_more(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
 }
 
 /// The second batch of calculation and terrain-exchange icons of the Geo tool set.
+/// The survey add-on's work on points, labels, utilities and building survey.
+fn paint_geo_ops(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
+    use Icon::*;
+    match icon {
+        GeoAddPoint => {
+            // A point with its number, and a plus.
+            pen.dot(8.0, 15.0);
+            pen.c(8.0, 15.0, 2.4, b);
+            pen.text(10.5, 12.5, "12", 6.5, b);
+            pen.la(18.0, 3.0, 18.0, 11.0);
+            pen.la(14.0, 7.0, 22.0, 7.0);
+        }
+        GeoBulkPoints => {
+            // A polyline with a point at every vertex.
+            let v = [(3.0, 19.0), (8.0, 8.0), (15.0, 15.0), (21.0, 5.0)];
+            pen.poly(&v, false, b);
+            for (x, y) in v {
+                pen.c(x, y, 2.0, a);
+                pen.dot(x, y);
+            }
+        }
+        GeoInterpolate => {
+            // Two known heights and a new point between them.
+            pen.l(3.0, 18.0, 21.0, 8.0);
+            pen.dot(3.0, 18.0);
+            pen.dot(21.0, 8.0);
+            pen.c(12.0, 13.0, 2.4, a);
+            pen.dot(12.0, 13.0);
+            pen.text(12.0, 21.5, "z?", 6.5, a);
+        }
+        GeoIdentify => {
+            // A point under a magnifier.
+            pen.dot(10.0, 10.0);
+            pen.c(10.0, 10.0, 6.0, b);
+            pen.la(14.5, 14.5, 21.0, 21.0);
+            pen.text(10.0, 4.0, "i", 6.5, a);
+        }
+        GeoEditHeight => {
+            // A point with its height, and a pencil.
+            pen.dot(5.0, 8.0);
+            pen.text(9.0, 9.5, "245", 6.5, b);
+            pen.la(9.0, 21.0, 19.0, 11.0);
+            pen.la(11.0, 21.0, 21.0, 11.0);
+            pen.l(9.0, 21.0, 11.0, 21.0);
+            pen.l(19.0, 11.0, 21.0, 11.0);
+        }
+        GeoZeroZ => {
+            // Points dropping onto the zero level.
+            pen.l(2.0, 19.0, 22.0, 19.0);
+            for (x, y) in [(6.0, 6.0), (12.0, 10.0), (18.0, 4.0)] {
+                pen.dot(x, y);
+                pen.la(x, y + 2.0, x, 17.0);
+                pen.arrow_tip(x, 18.0, 0.0, 1.0, a);
+            }
+            pen.text(20.5, 13.0, "0", 6.0, a);
+        }
+        GeoOutside => {
+            // A boundary keeping its points; the ones outside struck out.
+            pen.rect(3.0, 3.0, 11.0, 11.0, b);
+            pen.dot(7.0, 7.0);
+            pen.dot(10.0, 11.0);
+            for (x, y) in [(19.0, 18.0), (18.0, 7.0)] {
+                pen.dot(x, y);
+                pen.la(x - 2.5, y - 2.5, x + 2.5, y + 2.5);
+                pen.la(x - 2.5, y + 2.5, x + 2.5, y - 2.5);
+            }
+        }
+        GeoKuNumbers => {
+            // A long number shortened.
+            pen.text(12.0, 8.0, "0012500", 5.0, b);
+            pen.la(12.0, 10.0, 12.0, 14.0);
+            pen.arrow_tip(12.0, 15.5, 0.0, 1.0, a);
+            pen.text(12.0, 21.0, "125-2", 6.5, a);
+        }
+        GeoMapScale => {
+            // A scale bar and 1:N.
+            pen.text(12.0, 9.0, "1:500", 7.0, a);
+            pen.l(3.0, 17.0, 21.0, 17.0);
+            for x in [3.0, 9.0, 15.0, 21.0] {
+                pen.l(x, 14.5, x, 19.5);
+            }
+            pen.rect(3.0, 16.0, 6.0, 2.0, b);
+            pen.rect(15.0, 16.0, 6.0, 2.0, b);
+        }
+        GeoRotateSituation => {
+            // A small plan with an arrow turning round it.
+            pen.poly(&[(8.0, 9.0), (16.0, 7.0), (17.0, 15.0), (9.0, 17.0)], true, b);
+            pen.arc(12.0, 12.0, 9.5, 20.0, 160.0, a);
+            pen.arrow_tip(3.2, 9.0, -0.3, 1.0, a);
+        }
+        GeoStatistics => {
+            // A bar chart.
+            pen.l(3.0, 21.0, 21.0, 21.0);
+            for (x, h) in [(5.0, 6.0), (10.0, 12.0), (15.0, 9.0), (20.0, 15.0)] {
+                pen.rect(x - 1.8, 21.0 - h, 3.6, h, if h > 10.0 { a } else { b });
+            }
+        }
+        GeoArcsToSegments => {
+            // An arc and the chords that replace it.
+            pen.arc(12.0, 20.0, 9.0, 0.0, 180.0, b);
+            pen.poly(&[(3.0, 20.0), (5.6, 13.6), (12.0, 11.0), (18.4, 13.6), (21.0, 20.0)], false, a);
+        }
+        GeoJoin3d => {
+            // Two pieces of a 3D line meeting at one point.
+            pen.poly(&[(2.0, 18.0), (7.0, 11.0), (12.0, 13.0)], false, b);
+            pen.poly(&[(12.0, 13.0), (17.0, 7.0), (22.0, 9.0)], false, a);
+            pen.c(12.0, 13.0, 2.2, a);
+        }
+        GeoTextRotate => {
+            // Text along a slanted line.
+            pen.l(3.0, 20.0, 21.0, 6.0);
+            pen.text(9.0, 9.0, "Ab", 8.0, a);
+            pen.arc(4.0, 20.0, 6.0, 0.0, 38.0, b);
+        }
+        GeoParcel => {
+            // A parcel and its number.
+            pen.poly(&[(3.0, 5.0), (19.0, 3.0), (22.0, 19.0), (5.0, 21.0)], true, b);
+            pen.text(12.5, 14.5, "123/4", 6.0, a);
+        }
+        GeoUtilityLabel => {
+            // A utility line and its label above it.
+            pen.l(2.0, 17.0, 22.0, 17.0);
+            pen.l(2.0, 19.0, 22.0, 19.0);
+            pen.text(12.0, 12.0, "DN150", 6.5, a);
+        }
+        GeoLeader => {
+            // A leader from a point to an underlined text.
+            pen.c(4.0, 19.0, 1.6, b);
+            pen.l(5.2, 17.8, 11.0, 10.0);
+            pen.l(11.0, 10.0, 22.0, 10.0);
+            pen.text(16.5, 7.5, "abc", 6.5, a);
+        }
+        GeoRoom => {
+            // A room outline with its area.
+            pen.rect(3.0, 4.0, 18.0, 16.0, b);
+            pen.text(12.0, 11.0, "1.01", 6.0, a);
+            pen.text(12.0, 17.5, "m²", 6.0, a);
+        }
+        GeoStairs => {
+            // A flight in plan: treads and the walking line.
+            pen.rect(4.0, 3.0, 12.0, 18.0, b);
+            for y in [6.0, 9.0, 12.0, 15.0, 18.0] {
+                pen.l(4.0, y, 16.0, y);
+            }
+            pen.c(10.0, 19.5, 1.2, a);
+            pen.la(10.0, 18.0, 10.0, 6.0);
+            pen.arrow_tip(10.0, 4.5, 0.0, -1.0, a);
+        }
+        GeoArrow => {
+            pen.la(4.0, 20.0, 18.0, 6.0);
+            pen.arrow_tip(19.5, 4.5, 1.0, -1.0, a);
+        }
+        _ => {}
+    }
+}
+
 fn paint_geo_calc(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
     use Icon::*;
     match icon {

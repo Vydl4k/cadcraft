@@ -72,23 +72,34 @@ pub const POINT_BLOCK: &str = "GEO_BOD";
 /// and a point keeps the closest such text. A GEO_BOD block at a point gives its attribute `tag`
 /// instead.
 pub(super) fn point_labels(st: &cadcraft_doc::EntityStore, pts: &[Vec3], layer: &str, tag: &str, slots: &[Vec2]) -> Vec<Option<String>> {
-    let mut labels: Vec<(Vec2, f64, String, bool)> = Vec::new();
+    point_label_entries(st, pts, layer, tag, slots).into_iter().map(|o| o.map(|(v, _)| v)).collect()
+}
+
+/// [`point_labels`] with the handle of each label (the GEO_BOD block's, for an attribute).
+pub(super) fn point_label_entries(
+    st: &cadcraft_doc::EntityStore,
+    pts: &[Vec3],
+    layer: &str,
+    tag: &str,
+    slots: &[Vec2],
+) -> Vec<Option<(String, Handle)>> {
+    let mut labels: Vec<(Vec2, f64, String, bool, Handle)> = Vec::new();
     for e in st.iter() {
         match &e.kind {
             EntityKind::Text(t) if e.common.layer.eq_ignore_ascii_case(layer) => {
                 let at = t.align_pt.filter(|_| t.halign != HAlign::Left).unwrap_or(t.insert).xy();
-                labels.push((at, t.height, t.value.trim().to_string(), false));
+                labels.push((at, t.height, t.value.trim().to_string(), false, e.handle));
             }
             EntityKind::Insert(i) if i.block.eq_ignore_ascii_case(POINT_BLOCK) => {
                 if let Some(a) = i.attribs.iter().find(|a| a.tag.eq_ignore_ascii_case(tag)) {
-                    labels.push((i.insert.xy(), a.text.height.max(1e-6), a.text.value.trim().to_string(), true));
+                    labels.push((i.insert.xy(), a.text.height.max(1e-6), a.text.value.trim().to_string(), true, e.handle));
                 }
             }
             _ => {}
         }
     }
     labels.retain(|l| l.0.x.is_finite() && l.0.y.is_finite() && l.1.is_finite() && l.1 > 0.0 && !l.2.is_empty());
-    let mut out: Vec<Option<(f64, String)>> = vec![None; pts.len()];
+    let mut out: Vec<Option<(f64, String, Handle)>> = vec![None; pts.len()];
     if labels.is_empty() || pts.is_empty() {
         return vec![None; pts.len()];
     }
@@ -102,7 +113,7 @@ pub(super) fn point_labels(st: &cadcraft_doc::EntityStore, pts: &[Vec3], layer: 
             grid.entry(ckey(q.xy())).or_default().push(i);
         }
     }
-    for (at, h, v, exact) in &labels {
+    for (at, h, v, exact, handle) in &labels {
         let (cx, cy) = ckey(*at);
         let mut best: Option<(f64, usize)> = None;
         for dx in -1..=1 {
@@ -132,12 +143,12 @@ pub(super) fn point_labels(st: &cadcraft_doc::EntityStore, pts: &[Vec3], layer: 
         }
         if let Some((d, i)) = best
             && let Some(slot) = out.get_mut(i)
-            && slot.as_ref().is_none_or(|(bd, _)| d < *bd)
+            && slot.as_ref().is_none_or(|(bd, ..)| d < *bd)
         {
-            *slot = Some((d, v.clone()));
+            *slot = Some((d, v.clone(), *handle));
         }
     }
-    out.into_iter().map(|o| o.map(|(_, v)| v)).collect()
+    out.into_iter().map(|o| o.map(|(_, v, h)| (v, h))).collect()
 }
 
 /// The vertical plane that fits the points best in plan: the line through their centre along

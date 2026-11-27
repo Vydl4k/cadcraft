@@ -236,15 +236,24 @@ pub(super) fn text(
     align: (HAlign, VAlign),
 ) -> Result<Handle> {
     let anchored = align != (HAlign::Left, VAlign::Baseline);
+    // Survey descriptions take the lettering the survey settings give them (GEONASTAVENI).
+    let (style, width_factor, oblique) = match s.doc()?.text_style(super::geo_nastaveni::STYLE_NOTES) {
+        Some(st) => (
+            st.name.clone(),
+            if st.width_factor.is_finite() && st.width_factor > 0.0 { st.width_factor } else { 1.0 },
+            if st.oblique.is_finite() { st.oblique } else { 0.0 },
+        ),
+        None => ("Standard".to_string(), 1.0, 0.0),
+    };
     let t = Text {
         insert: Vec3::new(at.x, at.y, 0.0),
         align_pt: anchored.then(|| Vec3::new(at.x, at.y, 0.0)),
         height: h,
         value,
         rotation: rot,
-        width_factor: 1.0,
-        oblique: 0.0,
-        style: "Standard".into(),
+        width_factor,
+        oblique,
+        style,
         halign: align.0,
         valign: align.1,
     };

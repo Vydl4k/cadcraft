@@ -445,7 +445,7 @@ fn ensure_point_block(s: &mut Session, n: &Nastaveni) -> Result<()> {
     Ok(())
 }
 
-fn run_geobody(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn run_geobody(s: &mut Session, p: &Value) -> Result<Value> {
     let (text, file) = if let Some(t) = str_param(p, "text") {
         (t.to_string(), "text".to_string())
     } else if let Some(path) = str_param(p, "path") {

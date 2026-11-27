@@ -314,6 +314,21 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
         ],
     ),
     (
+        "Point Operations",
+        &[
+            (Icon::GeoAddPoint, "geobod", "Add Point"),
+            (Icon::GeoBulkPoints, "geobodyhromadne", "Add Points at Vertices"),
+            (Icon::GeoInterpolate, "geointerpolace", "Interpolate Height"),
+            (Icon::GeoIdentify, "geoident", "Identify Point"),
+        ],
+        &[
+            (Icon::GeoEditHeight, "geovyskabodu", "Change Point Height"),
+            (Icon::GeoZeroZ, "geoznula", "Points to Height 0"),
+            (Icon::GeoOutside, "geomimo", "Delete Points Outside"),
+            (Icon::GeoKuNumbers, "geocislaku", "Point Numbers to Cadastral Form"),
+        ],
+    ),
+    (
         "Terrain",
         &[
             (Icon::GeoTerrain, "geodmt", "Terrain Model"),
@@ -356,6 +371,16 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
         ],
     ),
     (
+        "Labels",
+        &[
+            (Icon::GeoParcel, "geoparcela", "Parcel Number"),
+            (Icon::GeoUtilityLabel, "geopopissite", "Utility Line Label"),
+            (Icon::GeoLeader, "geopopis", "Label with Leader"),
+            (Icon::GeoArrow, "geosipka", "Arrow"),
+        ],
+        &[],
+    ),
+    (
         "Calculations",
         &[
             (Icon::GeoPolar, "geopolarni", "Polar Method"),
@@ -377,7 +402,20 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoTapeOutline, "geoomerne", "Outline from Tape Measurements"),
             (Icon::GeoElevation, "geopohled", "Elevation or Section from Points"),
         ],
-        &[(Icon::GeoHeightMark, "geokota", "Height Mark")],
+        &[(Icon::GeoHeightMark, "geokota", "Height Mark"), (Icon::GeoRoom, "geomistnost", "Room Label"), (Icon::GeoStairs, "geoschody", "Stairs")],
+    ),
+    (
+        "Tools",
+        &[
+            (Icon::GeoMapScale, "geomeritko", "Change Map Scale"),
+            (Icon::GeoRotateSituation, "geootocit", "Rotate Situation"),
+            (Icon::GeoStatistics, "geostatistika", "Drawing Statistics"),
+        ],
+        &[
+            (Icon::GeoArcsToSegments, "geoobluky", "Arcs to Straight Segments"),
+            (Icon::GeoJoin3d, "geospoj3d", "Join 3D Polylines"),
+            (Icon::GeoTextRotate, "geotextrot", "Rotate Texts"),
+        ],
     ),
     (
         "Sheet and Exchange",

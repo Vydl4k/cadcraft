@@ -419,7 +419,7 @@ fn clip_half(poly: &[Vec2], f: impl Fn(Vec2) -> f64) -> Vec<Vec2> {
     out
 }
 
-fn inside(p: Vec2, poly: &[Vec2]) -> bool {
+pub(super) fn inside(p: Vec2, poly: &[Vec2]) -> bool {
     let n = poly.len();
     let mut c = false;
     for i in 0..n {
