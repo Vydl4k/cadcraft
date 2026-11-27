@@ -26,9 +26,11 @@ mod geo_mapa;
 mod geo_nastaveni;
 mod geo_pohled;
 mod geo_pomucky;
+mod geo_pomucky2;
 mod geo_popis;
 mod geo_ram;
 mod geo_rek;
+mod geo_rek2;
 mod geo_rezy;
 mod geo_teren;
 mod geo_teren2;
@@ -236,6 +238,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_pohled::specs());
         v.extend(geo_popis::specs());
         v.extend(geo_pomucky::specs());
+        v.extend(geo_pomucky2::specs());
         v.extend(geo_ram::specs());
         v.extend(geo_rezy::specs());
         v.extend(geo_hypso::specs());
@@ -250,6 +253,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_dmt_upravy::specs());
         v.extend(geo_vkm::specs());
         v.extend(geo_rek::specs());
+        v.extend(geo_rek2::specs());
         v.extend(geo_tools::specs());
         v.extend(props::specs());
         v.extend(inquiry::specs());

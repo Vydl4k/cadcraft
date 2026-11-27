@@ -231,6 +231,15 @@ pub enum Icon {
     GeoRoom,
     GeoStairs,
     GeoArrow,
+    GeoVault,
+    GeoCladding,
+    GeoOpeningLabel,
+    GeoPenetration,
+    GeoStairSection,
+    GeoCleanup,
+    GeoCrossings,
+    GeoLandTake,
+    GeoCasing,
     PdfImport,
 }
 
@@ -535,7 +544,9 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
         | GeoTinHeight | GeoCadastreOld => paint_geo_calc(pen, icon, b, a),
         GeoAddPoint | GeoBulkPoints | GeoInterpolate | GeoIdentify | GeoEditHeight | GeoZeroZ | GeoOutside | GeoKuNumbers | GeoMapScale
         | GeoRotateSituation | GeoStatistics | GeoArcsToSegments | GeoJoin3d | GeoTextRotate | GeoParcel | GeoUtilityLabel | GeoLeader | GeoRoom
-        | GeoStairs | GeoArrow => paint_geo_ops(pen, icon, b, a),
+        | GeoStairs | GeoArrow | GeoVault | GeoCladding | GeoOpeningLabel | GeoPenetration | GeoStairSection | GeoCleanup => {
+            paint_geo_ops(pen, icon, b, a)
+        }
         GeoKml => {
             // A globe with a pin.
             pen.c(12.0, 13.0, 8.0, b);
@@ -1794,6 +1805,81 @@ fn paint_geo_ops(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
         GeoArrow => {
             pen.la(4.0, 20.0, 18.0, 6.0);
             pen.arrow_tip(19.5, 4.5, 1.0, -1.0, a);
+        }
+        GeoVault => {
+            // A vault in section: soffit and back arcs on their springings.
+            pen.arc(12.0, 18.0, 8.0, 0.0, 180.0, a);
+            pen.arc(12.0, 18.0, 10.5, 0.0, 180.0, b);
+            pen.l(1.5, 18.0, 4.0, 18.0);
+            pen.l(20.0, 18.0, 22.5, 18.0);
+            pen.l(1.5, 18.0, 1.5, 22.0);
+            pen.l(22.5, 18.0, 22.5, 22.0);
+        }
+        GeoCladding => {
+            // A wall face and a thin lining along it.
+            pen.rect(3.0, 3.0, 8.0, 18.0, b);
+            pen.rect(11.0, 3.0, 3.0, 18.0, a);
+            for y in [7.0, 12.0, 17.0] {
+                pen.la(11.0, y, 14.0, y - 2.0);
+            }
+        }
+        GeoOpeningLabel => {
+            // A wall break with width/height written over it.
+            pen.l(2.0, 16.0, 7.0, 16.0);
+            pen.l(17.0, 16.0, 22.0, 16.0);
+            pen.l(7.0, 14.0, 7.0, 18.0);
+            pen.l(17.0, 14.0, 17.0, 18.0);
+            pen.text(12.0, 10.0, "12/15", 6.0, a);
+        }
+        GeoPenetration => {
+            // A rectangle crossed by its diagonals.
+            pen.rect(5.0, 5.0, 14.0, 14.0, b);
+            pen.la(5.0, 5.0, 19.0, 19.0);
+            pen.la(19.0, 5.0, 5.0, 19.0);
+        }
+        GeoStairSection => {
+            // Steps in section with the slab under them.
+            pen.poly(
+                &[(3.0, 21.0), (3.0, 17.0), (8.0, 17.0), (8.0, 13.0), (13.0, 13.0), (13.0, 9.0), (18.0, 9.0), (18.0, 5.0), (22.0, 5.0)],
+                false,
+                a,
+            );
+            pen.l(22.0, 5.0, 22.0, 9.5);
+            pen.l(22.0, 9.5, 9.0, 21.0);
+            pen.l(3.0, 21.0, 9.0, 21.0);
+        }
+        GeoCrossings => {
+            // Two lines crossing, the crossing ringed.
+            pen.l(2.0, 6.0, 22.0, 18.0);
+            pen.la(2.0, 18.0, 22.0, 6.0);
+            pen.c(12.0, 12.0, 3.5, a);
+        }
+        GeoLandTake => {
+            // Two parcels and the take across them.
+            pen.rect(2.0, 4.0, 20.0, 16.0, b);
+            pen.l(12.0, 4.0, 12.0, 20.0);
+            pen.rect(6.0, 9.0, 12.0, 6.0, a);
+            for x in [8.0, 11.0, 14.0, 17.0] {
+                pen.la(x - 2.0, 15.0, x, 9.0);
+            }
+        }
+        GeoCasing => {
+            // A utility line through a casing.
+            pen.la(2.0, 12.0, 22.0, 12.0);
+            pen.l(7.0, 8.0, 17.0, 8.0);
+            pen.l(7.0, 16.0, 17.0, 16.0);
+            pen.l(7.0, 8.0, 7.0, 16.0);
+            pen.l(17.0, 8.0, 17.0, 16.0);
+        }
+        GeoCleanup => {
+            // Overlapping lines and a broom of short strokes.
+            pen.l(2.0, 8.0, 14.0, 8.0);
+            pen.la(8.0, 9.5, 20.0, 9.5);
+            pen.la(14.0, 21.0, 21.0, 14.0);
+            for k in 0..4 {
+                let o = k as f32 * 1.5;
+                pen.l(9.0 + o, 17.0 - o, 12.0 + o, 20.0 - o);
+            }
         }
         _ => {}
     }

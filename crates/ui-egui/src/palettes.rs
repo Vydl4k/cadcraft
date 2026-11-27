@@ -378,7 +378,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoLeader, "geopopis", "Label with Leader"),
             (Icon::GeoArrow, "geosipka", "Arrow"),
         ],
-        &[],
+        &[(Icon::GeoCasing, "geochranicka", "Casing Pipe")],
     ),
     (
         "Calculations",
@@ -415,6 +415,9 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoArcsToSegments, "geoobluky", "Arcs to Straight Segments"),
             (Icon::GeoJoin3d, "geospoj3d", "Join 3D Polylines"),
             (Icon::GeoTextRotate, "geotextrot", "Rotate Texts"),
+            (Icon::GeoCleanup, "geocisteni", "Clean Up Lines"),
+            (Icon::GeoCrossings, "geokrizeni", "Check Crossings"),
+            (Icon::GeoLandTake, "geozabory", "Land Take"),
         ],
     ),
     (
