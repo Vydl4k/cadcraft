@@ -326,7 +326,7 @@ fn run_geovrstevnice(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(CMD, "`interval` must be between 0.001 and 1000 m"));
     }
     let main = p.get("main").and_then(Value::as_u64).unwrap_or(5).clamp(1, 1000) as i64;
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(scale.is_finite() && (1.0..=1_000_000.0).contains(&scale)) {
         return Err(bad(CMD, "`scale` must be a map scale like 500 or 1000"));
     }

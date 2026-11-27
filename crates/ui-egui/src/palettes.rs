@@ -302,7 +302,11 @@ pub const TOOLSET_TABS: [&str; 3] = ["Drafting", "Modeling", "Geo"];
 pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
     (
         "Survey Points",
-        &[(Icon::GeoImportPoints, "geobody", "Import Points"), (Icon::GeoSpotHeight, "geovyska", "Terrain Height at Point")],
+        &[
+            (Icon::GeoImportPoints, "geobody", "Import Points"),
+            (Icon::GeoSpotHeight, "geovyska", "Terrain Height at Point"),
+            (Icon::GeoSettings, "geonastaveni", "Survey Settings"),
+        ],
         &[
             (Icon::GeoExportPoints, "geoseznam", "Export Points"),
             (Icon::GeoDuplicates, "geokontrola", "Check Duplicate Points"),

@@ -164,6 +164,7 @@ pub enum Icon {
     GeoDuplicates,
     GeoShiftHeights,
     GeoSpotHeight,
+    GeoSettings,
     GeoTerrain,
     GeoContours,
     GeoVolumes,
@@ -351,6 +352,20 @@ fn paint_geo(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32, dim: bool) {
                 pen.la(x, y - 3.0, x, y - 10.0);
                 pen.arrow_tip(x, y - 11.5, 0.0, -1.0, a);
             }
+        }
+        GeoSettings => {
+            // A gear (the settings) and lettering (the fonts of the labels).
+            pen.c(8.0, 15.0, 4.5, b);
+            pen.c(8.0, 15.0, 1.7, b);
+            for k in 0..8 {
+                let ang = k as f32 * std::f32::consts::FRAC_PI_4;
+                let (s, c) = ang.sin_cos();
+                pen.l(8.0 + 4.5 * c, 15.0 + 4.5 * s, 8.0 + 6.5 * c, 15.0 + 6.5 * s);
+            }
+            pen.text(17.0, 8.0, "Aa", 9.0, a);
+            pen.la(13.5, 13.0, 21.5, 13.0);
+            pen.dot(18.0, 19.0);
+            pen.text(20.5, 19.5, "1", 6.0, a);
         }
         GeoSpotHeight => {
             // A point on a slope with its height written beside it.

@@ -57,37 +57,87 @@ pub(super) fn numbered_points(s: &Session, space: &Space, only: Option<&[Handle]
         Some(hs) => hs.iter().filter_map(|h| st.get(*h)).filter_map(|e| point(e)).collect(),
         None => st.iter().filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_POINTS)).filter_map(|e| point(e)).collect(),
     };
-    let labels: Vec<(Vec2, f64, String)> = st
-        .iter()
-        .filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_NUMBERS))
-        .filter_map(|e| if let EntityKind::Text(t) = &e.kind { Some((t.insert.xy(), t.height, t.value.clone())) } else { None })
-        .filter(|l| l.0.x.is_finite() && l.0.y.is_finite() && l.1.is_finite() && l.1 > 0.0)
-        .collect();
-    let mut grid: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
-    let cell = labels.iter().map(|l| l.1).fold(0.0f64, f64::max).clamp(0.01, 1e6) * 4.0;
-    let ckey = |q: Vec2| ((q.x / cell).floor() as i64, (q.y / cell).floor() as i64);
-    for (i, l) in labels.iter().enumerate() {
-        grid.entry(ckey(l.0)).or_default().push(i);
+    let slots = super::geo::label_slots(&super::geo_nastaveni::load(s), LAYER_NUMBERS);
+    let values = point_labels(st, &pts, LAYER_NUMBERS, "CISLO", &slots);
+    Ok(pts.iter().zip(values).enumerate().map(|(n, (q, v))| (v.unwrap_or_else(|| format!("{}", n + 1)), *q)).collect())
+}
+
+/// The block GEOBODY inserts at each point when the settings ask for points as blocks: its
+/// attributes CISLO (number), VYSKA (height) and KOD (code).
+pub const POINT_BLOCK: &str = "GEO_BOD";
+
+/// The label on `layer` that belongs to each of `pts`. `slots` are where GEOBODY puts such a
+/// label relative to its point, in units of the label's own height (every side the settings
+/// allow): a text is a point's label when it sits within one text height of one of its slots,
+/// and a point keeps the closest such text. A GEO_BOD block at a point gives its attribute `tag`
+/// instead.
+pub(super) fn point_labels(st: &cadcraft_doc::EntityStore, pts: &[Vec3], layer: &str, tag: &str, slots: &[Vec2]) -> Vec<Option<String>> {
+    let mut labels: Vec<(Vec2, f64, String, bool)> = Vec::new();
+    for e in st.iter() {
+        match &e.kind {
+            EntityKind::Text(t) if e.common.layer.eq_ignore_ascii_case(layer) => {
+                let at = t.align_pt.filter(|_| t.halign != HAlign::Left).unwrap_or(t.insert).xy();
+                labels.push((at, t.height, t.value.trim().to_string(), false));
+            }
+            EntityKind::Insert(i) if i.block.eq_ignore_ascii_case(POINT_BLOCK) => {
+                if let Some(a) = i.attribs.iter().find(|a| a.tag.eq_ignore_ascii_case(tag)) {
+                    labels.push((i.insert.xy(), a.text.height.max(1e-6), a.text.value.trim().to_string(), true));
+                }
+            }
+            _ => {}
+        }
     }
-    let mut out = Vec::with_capacity(pts.len());
-    for (n, q) in pts.iter().enumerate() {
-        let (cx, cy) = ckey(q.xy());
-        let mut best: Option<(f64, &str)> = None;
+    labels.retain(|l| l.0.x.is_finite() && l.0.y.is_finite() && l.1.is_finite() && l.1 > 0.0 && !l.2.is_empty());
+    let mut out: Vec<Option<(f64, String)>> = vec![None; pts.len()];
+    if labels.is_empty() || pts.is_empty() {
+        return vec![None; pts.len()];
+    }
+    // Points in a grid as coarse as the reach of the largest label.
+    let far = slots.iter().map(|v| v.x.hypot(v.y)).fold(0.0f64, f64::max) + 1.0;
+    let cell = labels.iter().map(|l| far * l.1).fold(0.0f64, f64::max).clamp(0.01, 1e6);
+    let ckey = |q: Vec2| ((q.x / cell).floor() as i64, (q.y / cell).floor() as i64);
+    let mut grid: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
+    for (i, q) in pts.iter().enumerate() {
+        if q.x.is_finite() && q.y.is_finite() {
+            grid.entry(ckey(q.xy())).or_default().push(i);
+        }
+    }
+    for (at, h, v, exact) in &labels {
+        let (cx, cy) = ckey(*at);
+        let mut best: Option<(f64, usize)> = None;
         for dx in -1..=1 {
             for dy in -1..=1 {
                 for &i in grid.get(&(cx.saturating_add(dx), cy.saturating_add(dy))).map(Vec::as_slice).unwrap_or(&[]) {
-                    let Some((at, h, v)) = labels.get(i) else { continue };
-                    let want = Vec2::new(q.x + 0.6 * h, q.y + 0.25 * h);
-                    let d = (at.x - want.x).hypot(at.y - want.y);
-                    if d < 0.5 * h && best.is_none_or(|(bd, _)| d < bd) {
-                        best = Some((d, v.as_str()));
+                    let Some(q) = pts.get(i) else { continue };
+                    let d = if *exact {
+                        let d = (at.x - q.x).hypot(at.y - q.y);
+                        if d > 1e-6 * q.x.abs().max(q.y.abs()).max(1.0) {
+                            continue;
+                        }
+                        0.0
+                    } else {
+                        let Some(d) = slots.iter().map(|o| (at.x - q.x - o.x * h).hypot(at.y - q.y - o.y * h)).min_by(f64::total_cmp) else {
+                            continue;
+                        };
+                        if d > *h {
+                            continue;
+                        }
+                        d
+                    };
+                    if best.is_none_or(|(bd, _)| d < bd) {
+                        best = Some((d, i));
                     }
                 }
             }
         }
-        out.push((best.map_or_else(|| format!("{}", n + 1), |(_, v)| v.to_string()), *q));
+        if let Some((d, i)) = best
+            && let Some(slot) = out.get_mut(i)
+            && slot.as_ref().is_none_or(|(bd, _)| d < *bd)
+        {
+            *slot = Some((d, v.clone()));
+        }
     }
-    Ok(out)
+    out.into_iter().map(|o| o.map(|(_, v)| v)).collect()
 }
 
 /// The vertical plane that fits the points best in plan: the line through their centre along

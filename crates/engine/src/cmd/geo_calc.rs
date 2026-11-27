@@ -538,7 +538,7 @@ fn run_geovyska(s: &mut Session, p: &Value) -> Result<Value> {
     let z = height_at(&tris, at).ok_or_else(|| bad(CMD, "the point is outside the terrain model"))?;
     let decimals = p.get("decimals").and_then(Value::as_u64).unwrap_or(2).min(4) as usize;
     if p.get("label").and_then(Value::as_bool).unwrap_or(true) {
-        let scale = f64_or(p, "scale", 500.0).clamp(1.0, 1e6);
+        let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s)).clamp(1.0, 1e6);
         let h = 0.002 * scale;
         ensure_layer(s, LAYER_SPOT, 1)?;
         add(s, &space, LAYER_SPOT, EntityKind::Point(Point { p: Vec3::new(at.x, at.y, z), angle: 0.0 }))?;
@@ -650,7 +650,7 @@ fn run_geoprofil(s: &mut Session, p: &Value) -> Result<Value> {
     let at = p.get("at").and_then(point_value).ok_or_else(|| bad(CMD, "`at` ([x, y], where to draw the profile) is required"))?;
     let ex = f64_or(p, "exaggeration", 10.0);
     let step = f64_or(p, "step", 10.0);
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(ex.is_finite() && (0.01..=1000.0).contains(&ex) && step.is_finite() && step > 0.0 && scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`exaggeration`, `step` and `scale` must be positive"));
     }

@@ -163,8 +163,8 @@ fn place_symbol(s: &mut Session, space: &Space, symbol: &str, at: Vec3, rotation
     add(s, space, LAYER_SYMBOLS, EntityKind::Insert(ins))
 }
 
-fn map_scale(p: &Value, cmd: &str) -> Result<f64> {
-    let scale = f64_or(p, "scale", 500.0);
+fn map_scale(s: &Session, p: &Value, cmd: &str) -> Result<f64> {
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(cmd, "`scale` must be a map scale like 500 or 1000"));
     }
@@ -182,7 +182,7 @@ fn run_geoznacka(s: &mut Session, p: &Value) -> Result<Value> {
     if !rotation.is_finite() {
         return Err(bad(CMD, "`rotation` must be an angle in degrees"));
     }
-    let scale = map_scale(p, CMD)?;
+    let scale = map_scale(s, p, CMD)?;
     let space = s.space();
     ensure_layer(s, LAYER_SYMBOLS, 7)?;
     let h = place_symbol(s, &space, symbol, Vec3::new(at.x, at.y, 0.0), rotation.to_radians(), scale)?;
@@ -251,38 +251,27 @@ fn run_geokresba(s: &mut Session, p: &Value) -> Result<Value> {
         return Ok(json!({ "table": DEFAULT_TABLE, "message": "The built-in code table" }));
     }
     let table = parse_table(str_param(p, "table").unwrap_or(DEFAULT_TABLE)).map_err(|e| bad(CMD, e))?;
-    let scale = map_scale(p, CMD)?;
+    let scale = map_scale(s, p, CMD)?;
     let space = s.space();
-    let pts = numbered_points(s, &space, None)?;
+    // `handles`: just those points (GEOBODY's newly loaded ones).
+    let only: Option<Vec<Handle>> = match p.get("handles") {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(super::targets(s, p)?),
+    };
+    let pts = numbered_points(s, &space, only.as_deref())?;
     // Each point's code is the GEO_kody text GEOBODY wrote beside it.
-    let codes: Vec<(Vec2, f64, String)> = {
+    let codes: Vec<Option<String>> = {
         let d = s.doc()?;
         let st = d.space(&space).ok_or_else(|| bad(CMD, "no drawing space"))?;
-        st.iter()
-            .filter(|e| e.common.layer.eq_ignore_ascii_case(LAYER_CODES))
-            .filter_map(|e| if let EntityKind::Text(t) = &e.kind { Some((t.insert.xy(), t.height, t.value.trim().to_string())) } else { None })
-            .filter(|c| c.1.is_finite() && c.1 > 0.0)
-            .collect()
-    };
-    let code_of = |q: Vec3| -> Option<String> {
-        codes
-            .iter()
-            .filter_map(|(at, h, v)| {
-                // GEOBODY puts the code at 0.6·h right and 2.75·h below the point, at 0.8 the size.
-                let h0 = h / 0.8;
-                let want = Vec2::new(q.x + 0.6 * h0, q.y - 2.75 * h0);
-                let d = (at.x - want.x).hypot(at.y - want.y);
-                (d < 0.5 * h0).then_some((d, v))
-            })
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, v)| v.clone())
+        let at: Vec<Vec3> = pts.iter().map(|(_, q)| *q).collect();
+        super::geo_pohled::point_labels(st, &at, LAYER_CODES, "KOD", &super::geo::label_slots(&super::geo_nastaveni::load(s), LAYER_CODES))
     };
     let mut lines: BTreeMap<String, (String, bool, Vec<(String, Vec3)>)> = BTreeMap::new();
     let mut n_sym = 0;
     let mut unknown: Vec<String> = Vec::new();
     ensure_layer(s, LAYER_SYMBOLS, 7)?;
-    for (num, q) in &pts {
-        let Some(code) = code_of(*q) else { continue };
+    for ((num, q), code) in pts.iter().zip(codes) {
+        let Some(code) = code else { continue };
         if code.is_empty() {
             continue;
         }
@@ -359,7 +348,7 @@ fn run_geolinie(s: &mut Session, p: &Value) -> Result<Value> {
         "right" | "vpravo" => -1.0,
         o => return Err(bad(CMD, format!("`side` must be left or right, not \"{o}\""))),
     };
-    let k = map_scale(p, CMD)? / 1000.0;
+    let k = map_scale(s, p, CMD)? / 1000.0;
     let layer = format!("GEO_L_{style}");
     ensure_layer(s, &layer, 7)?;
     let mut items = 0;
@@ -423,7 +412,7 @@ fn run_geosvah(s: &mut Session, p: &Value) -> Result<Value> {
     if tp.len() < 2 || bp.len() < 2 {
         return Err(bad(CMD, "both edges need at least two vertices"));
     }
-    let k = map_scale(p, CMD)? / 1000.0;
+    let k = map_scale(s, p, CMD)? / 1000.0;
     let spacing = f64_or(p, "spacing", 2.0);
     if !(spacing.is_finite() && spacing >= 0.2) {
         return Err(bad(CMD, "`spacing` must be at least 0.2 mm"));

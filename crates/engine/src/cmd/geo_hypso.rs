@@ -138,7 +138,7 @@ fn run_geohypso(s: &mut Session, p: &Value) -> Result<Value> {
         None | Some(Value::Null) => nice_interval(zmax - zmin, 10.0),
         Some(v) => v.as_f64().filter(|v| v.is_finite() && *v > 0.0).ok_or_else(|| bad(CMD, "`interval` must be a positive height"))?,
     };
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`scale` must be a map scale like 500"));
     }

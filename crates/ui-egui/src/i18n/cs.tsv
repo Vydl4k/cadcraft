@@ -1452,5 +1452,26 @@ menu	Import Cadastral Map (VKM, VGI)...	Katastrální mapa (VKM, VGI)...
 	Cadastral maps (VKM, VGI)	Katastrální mapy (VKM, VGI)
 menu	Cadastral maps (VKM, VGI)	Katastrální mapy (VKM, VGI)
 	Enter name of coordinate list to import	Zadejte soubor se seznamem souřadnic
-	Columns (P number, Y, X, Z, K code, - skip)	Sloupce (P číslo, Y, X, Z, K kód, - přeskočit)
+	Columns (P number, Y, X, Z, Z2, K code, - skip)	Sloupce (P číslo, Y, X, Z, Z2, K kód, - přeskočit)
 	Drawing scale 1: (sets the label size)	Měřítko výkresu 1: (určí velikost popisů)
+	Survey Settings	Nastavení geodezie
+	Survey Settings...	Nastavení geodezie...
+menu	Settings...	Nastavení...
+	Survey settings	Nastavení geodezie
+	Drawing scale 1:	Měřítko výkresu 1:
+	Height decimals (0-4)	Desetinná místa výšek (0-4)
+	Point number position	Poloha čísla bodu
+	Heights shown	Zobrazení výšek
+	Duplicate point numbers	Duplicitní čísla bodů
+	Shorten 12-digit point numbers?	Zkrátit dvanáctimístná čísla bodů?
+	Points at their height (3D)?	Vkládat body ve výšce (3D)?
+	Draw map symbols from codes on import?	Kreslit mapové značky podle kódů při načtení?
+	Insert each point as a block with attributes?	Vložit každý bod jako blok s atributy?
+	Save settings template to file	Uložit šablonu nastavení do souboru
+	Load settings template from file	Načíst šablonu nastavení ze souboru
+	Lettering of	Písmo pro
+	Font name	Název písma
+	Text height on paper (mm)	Výška písma na papíře (mm)
+	Slant angle (degrees)	Úhel sklonu (stupně)
+	Choose one of the options.	Vyberte jednu z možností.
+	Answer Yes or No.	Odpovězte Ano nebo Ne.

@@ -365,7 +365,7 @@ fn run_geooblouk(s: &mut Session, p: &Value) -> Result<Value> {
     let transition = f64_or(p, "transition", 0.0);
     let step = f64_or(p, "step", 10.0);
     let start = f64_or(p, "start", 0.0);
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(step.is_finite() && step >= 0.0 && start.is_finite() && start.abs() < 1e7 && scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`step` must be 0 or more, `start` a station and `scale` a map scale"));
     }
@@ -483,7 +483,7 @@ fn run_geomistopis(s: &mut Session, p: &Value) -> Result<Value> {
         .filter(|a| (1..=8).contains(&a.len()))
         .ok_or_else(|| bad(CMD, "`refs` must list 1 to 8 reference points"))?;
     let refs: Vec<Vec2> = refs.iter().map(|v| point_ref(s, &space, Some(v), "refs", CMD).map(|q| q.xy())).collect::<Result<_>>()?;
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`scale` must be a map scale like 500"));
     }

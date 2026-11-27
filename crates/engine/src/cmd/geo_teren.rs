@@ -240,7 +240,7 @@ fn run_geohrana(s: &mut Session, p: &Value) -> Result<Value> {
 fn run_geomrizka(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "geomrizka";
     let step = f64_or(p, "step", 5.0);
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(step.is_finite() && step > 0.0 && scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`step` and `scale` must be positive"));
     }
@@ -285,7 +285,7 @@ fn run_geostaniceni(s: &mut Session, p: &Value) -> Result<Value> {
     let (path, _) = path_of(s, h, &space).ok_or_else(|| bad(CMD, "the axis must be a line or polyline"))?;
     let step = f64_or(p, "step", 10.0);
     let start = f64_or(p, "start", 0.0);
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(step.is_finite() && step > 0.0 && start.is_finite() && start.abs() < 1e7 && scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`step`, `start` and `scale` must be numbers (step and scale positive)"));
     }

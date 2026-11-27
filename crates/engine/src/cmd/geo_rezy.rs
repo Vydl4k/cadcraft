@@ -140,7 +140,7 @@ fn run_geoniveleta(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let prof = find_profile(s, &space, &grade, CMD)?;
     let step = f64_or(p, "step", 10.0);
-    let scale = f64_or(p, "scale", 500.0);
+    let scale = f64_or(p, "scale", super::geo_nastaveni::scale(s));
     if !(step.is_finite() && step > 0.0 && scale.is_finite() && (1.0..=1e6).contains(&scale)) {
         return Err(bad(CMD, "`step` and `scale` must be positive"));
     }

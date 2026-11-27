@@ -1693,3 +1693,24 @@ menu	Import Cadastral Map (VKM, VGI)	导入地籍图 (VKM, VGI)
 menu	Import Cadastral Map (VKM, VGI)...	导入地籍图 (VKM, VGI)...
 	Cadastral maps (VKM, VGI)	地籍图 (VKM, VGI)
 menu	Cadastral maps (VKM, VGI)	地籍图 (VKM, VGI)
+	Survey Settings	测量设置
+	Survey Settings...	测量设置...
+menu	Settings...	设置...
+	Survey settings	测量设置
+	Drawing scale 1:	图纸比例 1:
+	Height decimals (0-4)	高程小数位 (0-4)
+	Point number position	点号位置
+	Heights shown	高程显示
+	Duplicate point numbers	重复点号
+	Shorten 12-digit point numbers?	缩短12位点号？
+	Points at their height (3D)?	按高程放置点 (3D)？
+	Draw map symbols from codes on import?	导入时按代码绘制地图符号？
+	Insert each point as a block with attributes?	每个点作为带属性的块插入？
+	Save settings template to file	将设置模板保存到文件
+	Load settings template from file	从文件加载设置模板
+	Lettering of	文字用于
+	Font name	字体名称
+	Text height on paper (mm)	图纸上的文字高度 (mm)
+	Slant angle (degrees)	倾斜角 (度)
+	Choose one of the options.	请选择一个选项。
+	Answer Yes or No.	请回答是或否。
