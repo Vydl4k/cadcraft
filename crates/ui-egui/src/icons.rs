@@ -240,6 +240,12 @@ pub enum Icon {
     GeoCrossings,
     GeoLandTake,
     GeoCasing,
+    GeoNiche,
+    GeoTruss,
+    GeoAxo,
+    GeoPassport,
+    GeoLayerTemplate,
+    GeoNewDrawing,
     PdfImport,
 }
 
@@ -1870,6 +1876,50 @@ fn paint_geo_ops(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
             pen.l(7.0, 16.0, 17.0, 16.0);
             pen.l(7.0, 8.0, 7.0, 16.0);
             pen.l(17.0, 8.0, 17.0, 16.0);
+        }
+        GeoNiche => {
+            // A wall in plan with a recess in its face.
+            pen.poly(&[(2.0, 8.0), (8.0, 8.0), (8.0, 12.0), (16.0, 12.0), (16.0, 8.0), (22.0, 8.0)], false, a);
+            pen.l(2.0, 18.0, 22.0, 18.0);
+        }
+        GeoTruss => {
+            // Rafters meeting at the ridge and a timber section.
+            pen.poly(&[(2.0, 20.0), (12.0, 5.0), (22.0, 20.0)], false, a);
+            pen.l(4.0, 20.0, 12.0, 8.0);
+            pen.l(20.0, 20.0, 12.0, 8.0);
+            pen.rect(9.5, 14.0, 5.0, 6.0, b);
+            pen.l(9.5, 14.0, 14.5, 20.0);
+            pen.l(14.5, 14.0, 9.5, 20.0);
+        }
+        GeoAxo => {
+            // A terrain block in axonometry.
+            pen.poly(&[(2.0, 14.0), (12.0, 19.0), (22.0, 14.0), (12.0, 9.0)], true, b);
+            pen.poly(&[(2.0, 14.0), (6.0, 8.0), (11.0, 6.0), (16.0, 3.0), (22.0, 14.0)], false, a);
+            pen.l(12.0, 9.0, 11.0, 6.0);
+        }
+        GeoPassport => {
+            // A room table.
+            pen.rect(3.0, 3.0, 18.0, 18.0, b);
+            for y in [8.0, 12.5, 17.0] {
+                pen.l(3.0, y, 21.0, y);
+            }
+            pen.l(13.0, 3.0, 13.0, 21.0);
+            pen.text(8.0, 6.8, "m²", 5.0, a);
+        }
+        GeoLayerTemplate => {
+            // Stacked layers and a page.
+            for (k, c) in [(0.0, b), (4.0, b), (8.0, a)] {
+                pen.poly(&[(2.0, 14.0 - k), (10.0, 10.0 - k), (18.0, 14.0 - k), (10.0, 18.0 - k)], true, c);
+            }
+            pen.rect(17.0, 15.0, 5.0, 7.0, a);
+        }
+        GeoNewDrawing => {
+            // A new sheet with survey points.
+            pen.poly(&[(5.0, 2.0), (15.0, 2.0), (19.0, 6.0), (19.0, 22.0), (5.0, 22.0)], true, b);
+            pen.dot(9.0, 12.0);
+            pen.dot(14.0, 16.0);
+            pen.la(16.0, 2.0, 16.0, 8.0);
+            pen.la(13.0, 5.0, 19.0, 5.0);
         }
         GeoCleanup => {
             // Overlapping lines and a broom of short strokes.

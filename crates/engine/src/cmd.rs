@@ -31,6 +31,7 @@ mod geo_popis;
 mod geo_ram;
 mod geo_rek;
 mod geo_rek2;
+mod geo_rek3;
 mod geo_rezy;
 mod geo_teren;
 mod geo_teren2;
@@ -254,6 +255,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(geo_vkm::specs());
         v.extend(geo_rek::specs());
         v.extend(geo_rek2::specs());
+        v.extend(geo_rek3::specs());
         v.extend(geo_tools::specs());
         v.extend(props::specs());
         v.extend(inquiry::specs());

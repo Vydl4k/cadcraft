@@ -306,6 +306,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoImportPoints, "geobody", "Import Points"),
             (Icon::GeoSpotHeight, "geovyska", "Terrain Height at Point"),
             (Icon::GeoSettings, "geonastaveni", "Survey Settings"),
+            (Icon::GeoNewDrawing, "geonovy", "New Survey Drawing"),
         ],
         &[
             (Icon::GeoExportPoints, "geoseznam", "Export Points"),
@@ -353,6 +354,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoTinRemove, "geodmtodebrat", "Remove Point from Terrain Model"),
             (Icon::GeoTinDelete, "geodmtsmazat", "Delete Terrain Triangle"),
             (Icon::GeoTinHeight, "geodmtvyska", "Change Terrain Vertex Height"),
+            (Icon::GeoAxo, "geoaxo", "3D View of the Survey"),
         ],
     ),
     (
@@ -418,6 +420,7 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoCleanup, "geocisteni", "Clean Up Lines"),
             (Icon::GeoCrossings, "geokrizeni", "Check Crossings"),
             (Icon::GeoLandTake, "geozabory", "Land Take"),
+            (Icon::GeoLayerTemplate, "geohladiny", "Layer Template"),
         ],
     ),
     (
