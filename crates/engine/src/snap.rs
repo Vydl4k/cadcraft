@@ -2,6 +2,7 @@
 
 mod curves;
 pub mod iso;
+mod raster;
 pub mod tracking;
 mod viewport;
 
@@ -543,6 +544,7 @@ fn gather_in(
     let mut cands: Vec<(u32, Vec2)> = Vec::new();
     let mut near_prims: Vec<Prim> = Vec::new();
     let mut count = 0usize;
+    let mut images = 0usize;
     let mut budget = MAX_BLOCK_LEAVES;
     for (e, known) in crate::select::candidates(d, space, ix, &probe.expand(aperture), true, false)? {
         if !d.is_visible(e) || frozen.iter().any(|l| l.eq_ignore_ascii_case(&e.common.layer)) || Some(e.handle) == skip {
@@ -580,6 +582,13 @@ fn gather_in(
                 }
                 _ => {}
             }
+        }
+        // A raster image snaps to the points its picture shows (snap/raster.rs).
+        if let EntityKind::Image(img) = &e.kind
+            && images < raster::MAX_IMAGES
+        {
+            images += 1;
+            cands.extend(raster::nodes(d, img, cursor, aperture, osmode));
         }
         let mut sink = Sink { osmode, aperture, probe, cands: &mut cands, near: &mut near_prims };
         sink.object(&e.kind, None);

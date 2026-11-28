@@ -264,11 +264,13 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     }
 }
 
-/// The survey imports (GEOBODY, GEOVFK, GEOIMPORTXML, GEOVKM) typed or from the menu: the file
+/// The survey imports (GEOBODY, GEOVFK, GEOIMPORTXML, GEOVKM, GEOOBRAZEK) typed or from the menu: the file
 /// comes from the host's file picker (where there is one), then the command asks the rest. JSON
 /// calls (with parameters) run the engine command as it is.
 pub fn route_geo_files(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
-    if !params.is_null() || !matches!(cadcraft_engine::cmd::resolve_alias(id).as_str(), "geobody" | "geovfk" | "geoimportxml" | "geovkm") {
+    if !params.is_null()
+        || !matches!(cadcraft_engine::cmd::resolve_alias(id).as_str(), "geobody" | "geovfk" | "geoimportxml" | "geovkm" | "geoobrazek")
+    {
         return None;
     }
     let cmd = cadcraft_engine::cmd::resolve_alias(id);

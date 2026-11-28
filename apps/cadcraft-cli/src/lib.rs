@@ -46,6 +46,19 @@ fn install_io() {
         plot: Some(|d, space, opts| cadcraft_io::plotter::plot(d, space, opts).map_err(|e| e.to_string())),
     });
     cadcraft_engine::cmd::file::set_image_decoder(|b| cadcraft_io::raster::decode(b).map_err(|e| e.to_string()));
+    // A PDF page shown as a picture (GEOOBRAZEK).
+    cadcraft_engine::cmd::geo_obrazek::set_pdf_picture(|bytes, page, password, dpi| {
+        cadcraft_io::pdf_raster::render_page_png(bytes, page, password, dpi)
+            .map(|p| cadcraft_engine::cmd::geo_obrazek::PdfPicture {
+                png: p.png,
+                width: p.width,
+                height: p.height,
+                page_mm: p.page_mm,
+                dpi: p.dpi,
+                pages: p.pages,
+            })
+            .map_err(|e| e.to_string())
+    });
     cadcraft_engine::cmd::file::set_write_as(|d, name, o| {
         cadcraft_io::write_with(d, name, &cadcraft_io::SaveOptions { version: o.version, binary: o.binary }).map_err(|e| e.to_string())
     });

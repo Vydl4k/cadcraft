@@ -309,6 +309,8 @@ pub const GEO: &[(&str, &[Tool], &[Tool])] = &[
             (Icon::GeoSpotHeight, "geovyska", "Terrain Height at Point"),
             (Icon::GeoSettings, "geonastaveni", "Survey Settings"),
             (Icon::GeoNewDrawing, "geonovy", "New Survey Drawing"),
+            (Icon::GeoPicture, "geoobrazek", "Picture Underlay"),
+            (Icon::GeoPictureScale, "geoobrazekmer", "Scale Picture by Distance"),
         ],
         &[
             (Icon::GeoExportPoints, "geoseznam", "Export Points"),

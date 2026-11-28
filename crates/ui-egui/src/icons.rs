@@ -245,6 +245,8 @@ pub enum Icon {
     GeoPassport,
     GeoLayerTemplate,
     GeoNewDrawing,
+    GeoPicture,
+    GeoPictureScale,
     PdfImport,
 }
 
@@ -1927,6 +1929,21 @@ fn paint_geo_ops(pen: &Pen<'_>, icon: Icon, b: Color32, a: Color32) {
             pen.dot(14.0, 16.0);
             pen.la(16.0, 2.0, 16.0, 8.0);
             pen.la(13.0, 5.0, 19.0, 5.0);
+        }
+        GeoPicture => {
+            // A picture (hills and sun) with a snapped corner.
+            pen.rect(2.0, 4.0, 20.0, 16.0, b);
+            pen.poly(&[(2.0, 17.0), (8.0, 10.0), (12.0, 14.0), (16.0, 9.0), (22.0, 16.0)], false, b);
+            pen.c(17.0, 7.5, 1.6, b);
+            pen.rect(6.0, 8.0, 4.0, 4.0, a);
+        }
+        GeoPictureScale => {
+            // A picture with a measured distance across it.
+            pen.rect(2.0, 4.0, 20.0, 16.0, b);
+            pen.la(5.0, 15.0, 19.0, 9.0);
+            pen.c(5.0, 15.0, 1.4, a);
+            pen.c(19.0, 9.0, 1.4, a);
+            pen.text(11.0, 7.5, "m", 6.0, a);
         }
         GeoCleanup => {
             // Overlapping lines and a broom of short strokes.

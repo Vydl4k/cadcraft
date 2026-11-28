@@ -1694,3 +1694,21 @@ menu	New Survey Drawing...	Nový geodetický výkres...
 	Layer template file	Soubor šablony hladin
 	Settings template file (Enter: none)	Soubor šablony nastavení (Enter: bez)
 	Layer template file (Enter: none)	Soubor šablony hladin (Enter: bez)
+	Picture Underlay	Obrázek jako podklad
+	Picture Underlay...	Obrázek jako podklad...
+menu	Picture Underlay...	Obrázek jako podklad...
+	Scale Picture by Distance	Měřítko obrázku podle vzdálenosti
+	Scale Picture by Distance...	Měřítko obrázku podle vzdálenosti...
+menu	Scale Picture by Distance...	Měřítko obrázku podle vzdálenosti...
+	Pictures and PDF (PNG, JPEG, BMP, TIFF, PDF)	Obrázky a PDF (PNG, JPEG, BMP, TIFF, PDF)
+	Image or PDF file	Soubor obrázku nebo PDF
+	PDF page	Stránka PDF
+	Pick the picture's lower-left corner	Určete levý dolní roh obrázku
+	Picture size	Velikost obrázku
+	Map scale 1:	Měřítko mapy 1:
+	Image resolution (dpi)	Rozlišení obrázku (dpi)
+	Real width of the picture	Skutečná šířka obrázku
+	Pick the first point of a known distance on the picture	Určete první bod známé vzdálenosti na obrázku
+	Pick the second point	Určete druhý bod
+	Real distance between the two points	Skutečná vzdálenost mezi body
+	Choose an image or PDF file.	Vyberte soubor obrázku nebo PDF.

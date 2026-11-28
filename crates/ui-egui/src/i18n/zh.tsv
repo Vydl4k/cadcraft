@@ -1952,3 +1952,21 @@ menu	New Survey Drawing...	新建测量图...
 	Layer template file	图层模板文件
 	Settings template file (Enter: none)	设置模板文件（回车：无）
 	Layer template file (Enter: none)	图层模板文件（回车：无）
+	Picture Underlay	图片底图
+	Picture Underlay...	图片底图...
+menu	Picture Underlay...	图片底图...
+	Scale Picture by Distance	按距离缩放图片
+	Scale Picture by Distance...	按距离缩放图片...
+menu	Scale Picture by Distance...	按距离缩放图片...
+	Pictures and PDF (PNG, JPEG, BMP, TIFF, PDF)	图片和 PDF (PNG, JPEG, BMP, TIFF, PDF)
+	Image or PDF file	图片或 PDF 文件
+	PDF page	PDF 页码
+	Pick the picture's lower-left corner	指定图片左下角
+	Picture size	图片尺寸
+	Map scale 1:	地图比例 1:
+	Image resolution (dpi)	图片分辨率 (dpi)
+	Real width of the picture	图片实际宽度
+	Pick the first point of a known distance on the picture	在图片上指定已知距离的第一点
+	Pick the second point	指定第二点
+	Real distance between the two points	两点间实际距离
+	Choose an image or PDF file.	请选择图片或 PDF 文件。

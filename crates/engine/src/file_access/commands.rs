@@ -7,6 +7,7 @@
 
 /// Commands that read or write files, each path held to the roots where the file is touched.
 pub const FILES: &[&str] = &[
+    "geoobrazek",
     "geobody",
     "geohecras",
     "geohladiny",
@@ -86,6 +87,7 @@ pub const REFUSED: &[(&str, &str)] = &[
 
 /// Commands that touch no file.
 pub const NO_FILES: &[&str] = &[
+    "geoobrazekmer",
     "geoaxo",
     "geobod",
     "geobodyhromadne",
