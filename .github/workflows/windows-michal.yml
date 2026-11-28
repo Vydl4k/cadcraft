@@ -1,0 +1,68 @@
+# Builds CADCraft with the survey add-on for 64-bit Windows (unsigned) and keeps the MSI installer
+# and the portable zip as workflow artifacts. Runs on every push to the `michal` branch, or by hand
+# from the Actions tab. Packaging is packaging/windows/package.ps1, the same script releases use;
+# with no signing secrets in this fork it skips signing with a warning.
+name: Windows build (michal)
+
+on:
+  push:
+    branches: [michal]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-michal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
+          rustup default stable
+          rustc --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-x64-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-x64-
+
+      - name: WiX (installer builder) with the extensions the installer uses
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP 'wix'
+          dotnet tool install --tool-path $tools wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed.' }
+          $tools >> $env:GITHUB_PATH
+          $policy = Get-Content -Raw -LiteralPath packaging/windows/install-policy.json | ConvertFrom-Json
+          foreach ($extension in @($policy.extensions)) {
+            & (Join-Path $tools 'wix.exe') extension add -g "WixToolset.$extension.wixext/5.0.2"
+            if ($LASTEXITCODE -ne 0) { throw "WiX extension $extension installation failed." }
+          }
+
+      - name: Build and package (unsigned)
+        shell: pwsh
+        env:
+          CADCRAFT_VERSION: 0.21.0-${{ github.ref_name }}
+        run: pwsh packaging/windows/package.ps1 -Arch x64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CADCraft-${{ github.ref_name }}-windows-x64
+          path: |
+            dist/release/*.msi
+            dist/release/*.zip
+          if-no-files-found: error
+          retention-days: 30
